@@ -1,0 +1,9 @@
+{
+  "name": "ib-sde-interview-prep",
+  "private": true,
+  "version": "2.0.0",
+  "scripts": {
+    "dev": "npx serve . -p 3456",
+    "build": "node build.mjs"
+  }
+}

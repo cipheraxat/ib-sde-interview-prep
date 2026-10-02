@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IB SDE Interview Prep — Akshat Anand</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
+  <script src="/js/app.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-kicker">Interview Study</div>
+        <div class="brand-title">IB SDE Prep</div>
+        <div class="brand-sub">Akshat Anand · Barclays → Interactive Brokers</div>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-label"><span>Progress</span><span id="progress-text">0%</span></div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div class="sidebar-foot">
+        <button type="button" id="reset-progress" class="linkish">Reset progress</button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button type="button" class="menu-btn" id="menu-btn" aria-label="Open menu">☰</button>
+        <div class="crumbs" id="crumbs">Loading…</div>
+        <div class="top-actions">
+          <button type="button" id="mark-done" class="btn">Mark done</button>
+        </div>
+      </header>
+
+      <article class="lesson" id="lesson">
+        <p class="muted">Loading lesson…</p>
+      </article>
+
+      <footer class="pager">
+        <a href="#" id="prev" class="pager-btn">← Previous</a>
+        <a href="#" id="next" class="pager-btn">Next →</a>
+      </footer>
+    </div>
+  </div>
+  <div class="overlay" id="overlay"></div>
+</body>
+</html>
