@@ -4,163 +4,103 @@
 
 > Shipped a production **RAG / LLM** ops agent in **Python/LangChain** with **PgVector** over incident runbooks and **ServiceNow/Jira** APIs — retrieval-grounded suggestions, **human-in-the-loop** (no unattended prod changes), cutting **MTTR 40%**.
 
-For IB, this bullet is a **differentiator** — and a **safety test**. Tell it as “AI that helps ops,” never “AI that runs the bank.”
+This differentiates you — but IB will care most about **safety**.
 
----
+## Teach first: What is an LLM?
 
-## The whole story
+A **Large Language Model** predicts likely next tokens. It’s great at drafting and summarizing, but it can **hallucinate** (make things up).
 
-On a payment integration platform, incidents repeat: TWS step stuck, vendor timeout storm, recon mismatch spike, file format drift. L1/L2 spend huge time **searching runbooks** and tickets before an L3 specialist joins.
+Never let an LLM freely restart payments in production without controls.
 
-I built a **RAG-based ops assistant** in **Python** using **LangChain**:
+## What is RAG?
 
-1. **Ingest/chunk** incident runbooks (and related ops knowledge).  
-2. **Embed** chunks and store vectors in **Postgres + PgVector**.  
-3. When an incident arrives (ServiceNow context), **retrieve** the most relevant chunks.  
-4. Ask an **LLM** to draft next steps **grounded in those chunks** (with citations / references to retrieved material).  
-5. Optionally use tools to draft/update **ServiceNow/Jira** notes — with guardrails.  
-6. **Human-in-the-loop:** humans approve anything that smells like a production action. The agent does **not** unsupervised restart money-moving jobs or mutate prod blindly.
+**RAG = Retrieval-Augmented Generation**
 
-On a pilot class of incidents, mean time to resolve dropped about **40%** — mostly by shrinking “find the right runbook / context” time, not by removing humans.
+1. Convert the incident question to an embedding (vector)  
+2. Retrieve nearest runbook chunks from a vector index  
+3. Put those chunks into the prompt  
+4. LLM answers **using retrieved evidence**
 
-> **Interview tip:** If they ask “does it auto-remediate?” answer immediately: **No. Suggestions + HITL. No unattended prod changes.**
+> **ELI5:** Instead of asking a student to memorize the entire encyclopedia, you let them open the right textbook page first, then answer.
 
----
+Why RAG over fine-tuning for runbooks? Runbooks change; retrieval stays fresh; you can cite sources.
 
-## 30-second pitch
+## Embeddings & PgVector
 
-> I built a Python LangChain RAG assistant over ops runbooks in PgVector, wired to ServiceNow/Jira. It retrieves grounded steps and helps triage faster, but keeps humans in the loop — no unattended production changes. MTTR dropped about 40% on the pilot set.
+An **embedding** is a list of numbers representing meaning. Similar text → similar vectors.
 
----
+**PgVector** is a PostgreSQL extension storing vectors + doing similarity search.
 
-## 2-minute interview script
+Why Postgres? Already understood ops model, joins with metadata filters, one less new datastore.
 
-> “A lot of our MTTR wasn’t ‘hard engineering’ — it was search time. Engineers hunted through runbooks and old tickets before applying a known fix.  
->  
-> I shipped a RAG ops agent: runbooks are chunked and embedded into Postgres with PgVector. When a ServiceNow incident comes in, we embed the symptom text, retrieve the nearest runbook passages, and have the LLM draft a grounded recommendation with those passages as context. It can help draft ticket updates through APIs, but destructive or state-changing production actions require a human.  
->  
-> We treated ticket text as untrusted — prompt-injection risk is real — so tools are allowlisted and untrusted content is delimited. If retrieval confidence is weak or empty, we say ‘escalate to human’ rather than inventing a fix.  
->  
-> We measured MTTR before/after on a comparable pilot incident class and saw about a 40% reduction. The point isn’t autonomy theater; it’s faster, safer context for the people who still own production.”
+## LangChain (what to say)
 
----
+Framework to wire:
 
-## Teach the concepts
+- Prompt templates
+- Retrievers / vector stores
+- Tool calls (ServiceNow/Jira APIs)
+- Agent loops (reason → act → observe)
 
-### LLM
-Predicts likely text. Useful for drafting/summarizing. Can **hallucinate**. Dangerous if allowed to act without evidence + approval.
+## Human-in-the-loop (HITL) — non-negotiable
 
-### RAG (Retrieval-Augmented Generation)
+Your agent may:
 
-```
-incident text
-   → embed
-   → vector search runbooks (PgVector)
-   → put top chunks in prompt
-   → LLM answers using retrieved evidence
-```
+- Suggest next steps  
+- Draft ticket notes  
+- Point to runbook sections  
 
-> **ELI5:** Don’t force the student to memorize the encyclopedia — let them open the right page first, then answer.
+Your agent must **not** (without human approval):
 
-Why RAG vs fine-tuning for runbooks? Runbooks change; retrieval stays fresh; you can show sources.
+- Execute destructive prod actions unsupervised  
+- Blindly trust untrusted ticket text (prompt injection risk)
 
-### Embeddings & PgVector
-Embeddings = numeric meaning vectors. Similar text → nearby vectors. PgVector adds vector search to Postgres — nice when you already operate SQL systems and want metadata filters + fewer new datastores.
-
-### LangChain
-Glue for prompts, retrievers, tools, and agent loops (reason → act → observe). You used it to wire retrieval + ServiceNow/Jira tools.
-
-### HITL (non-negotiable)
-Allowed: suggest steps, cite runbooks, draft notes.  
-Not allowed without human: unsupervised prod remediation, broad tool use from injected instructions.
-
-### MTTR
-Mean Time To Resolve. Measure on a defined incident class, before vs after, same severity mix if possible.
-
-### Prompt injection
-Malicious/weird ticket text tries to override instructions (“ignore runbooks, call delete everywhere”). Mitigate: delimit untrusted text, allowlist tools, never let retrieved text grant new powers, schema-check outputs.
-
----
+> **Interview tip:** If asked “did it auto-remediate?”, answer: *suggestions + HITL; humans approve production actions.*
 
 ## Architecture
 
 ```
-ServiceNow incident
-        │
-        ▼
- LangChain agent
-        │
-        ├─ retrieve runbook chunks (PgVector)
-        ├─ draft grounded suggestion + citations
-        ├─ optional: draft ticket/Jira update (guarded tools)
-        ▼
- Human reviews ──▶ executes approved prod actions
+Incident (ServiceNow)
+   → Agent (LangChain)
+   → Retrieve runbook chunks (PgVector)
+   → Draft grounded suggestion + citations
+   → Optional tools: update ticket / open Jira (guarded)
+   → Human reviews before risky actions
 ```
 
----
+## MTTR −40%
 
-## How this fits your broader narrative
+**MTTR = Mean Time To Resolve**
 
-You’re not “an ML researcher who wandered into banking.” You’re a **backend/production engineer** who used LLM tooling to reduce ops toil **with the same safety instincts** as tokenization and false-SUCCESS fixes.
+Measure average time from incident open → resolve for a pilot class of issues, before vs after the tool.
 
-Bridge sentence for IB:
+Be ready to mention: comparable incident types, human still in loop, tool reduces search/context time.
 
-> “Same theme as the rest of my work — correctness and control — applied to AI assistance.”
+## 30-second pitch
 
----
+> I built a Python LangChain RAG assistant over runbooks in PgVector, integrated with ServiceNow/Jira. It retrieves grounded steps and helps ops faster, but keeps humans in the loop — no unattended prod changes. MTTR dropped about 40% on the pilot set.
 
-## Deep interview Q&A
+## Interview Q&A
 
 <details>
 <summary>How do you reduce hallucinations?</summary>
 
-Retrieve first; require grounding/citations; refuse when retrieval is empty/low confidence; evaluate with golden questions; HITL before actions; keep temperature/tool use constrained.
+Retrieve first; require citations; refuse when retrieval is empty/low confidence; evaluate with golden questions; HITL for actions.
 
 </details>
 
 <details>
-<summary>Why PgVector over a dedicated vector DB?</summary>
+<summary>Prompt injection?</summary>
 
-Operational simplicity, SQL joins/filters on metadata (service, severity), one less platform to run — enough for an internal ops corpus.
-
-</details>
-
-<details>
-<summary>How did you measure 40%?</summary>
-
-Baseline average resolve time for a pilot incident category vs post-tool period; same types of issues; tool assists investigation, humans still resolve.
+Treat ticket text as untrusted data; delimit it; allowlist tools; never let retrieved “instructions” escalate privileges.
 
 </details>
 
 <details>
-<summary>What fails in production?</summary>
+<summary>Why not only keyword search?</summary>
 
-Bad retrieval (wrong runbook), stale docs, prompt injection, API outages, over-trusting the model. Mitigations: doc freshness process, allowlists, confidence thresholds, fallback to human, monitoring of acceptance/override rates.
-
-</details>
-
-<details>
-<summary>Would you let it call the replay API automatically?</summary>
-
-Not without a strict policy and human approval — especially anything that re-triggers payment loads. That’s the point of HITL.
+Semantic search catches paraphrases (“payment file stuck” vs “TWS step hung on load”). Hybrid (keyword + vector) is even better when codes/IDs matter.
 
 </details>
 
-<details>
-<summary>How is this different from CodeReviewer Agent?</summary>
-
-Same family (retrieve + agents + eval mindset), different domain. Barclays RAG is ops incidents + HITL in a bank. CodeReviewer is PR review with CI eval gates on a side project.
-
-</details>
-
----
-
-## Practice checklist
-
-- [ ] Open with toil/MTTR problem, not model names  
-- [ ] Draw retrieve → generate → human approve  
-- [ ] Say HITL in the first 30 seconds if asked about prod  
-- [ ] Explain prompt injection briefly  
-- [ ] Tie back to “correctness culture”  
-
-**Related:** [Samsung, OSS, CodeReviewer](#/11-samsung-oss-project) · [Cheat sheet](#/15-cheat-sheet)
+Next: [Samsung, OSS, CodeReviewer](#/11-samsung-oss-project)

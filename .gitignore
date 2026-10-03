@@ -4,7 +4,3 @@
 *.out
 .idea/
 .vscode/
-
-site/.vercel
-site/node_modules
-.DS_Store

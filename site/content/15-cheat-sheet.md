@@ -19,14 +19,15 @@ Backend engineer, 4 years Barclays (SDE II). Payment **integration** platform: l
 
 ## Pick 2 deep bullets
 
-1. Tokenization HLD/LLD + recon  
+1. Tokenization — **proof** (recon join), **recovery** (chunks/retries), **cutover** (phases + rollback)  
 2. Async workers + false SUCCESS fix  
 
 Know others at 30s pitch level.
 
 ## Draw from memory
 
-- DPaaS → DTU → vendor tokens + recon loop  
+- DPaaS → DTU → vendor tokens + recon loop (**proof ≠ job green**)  
+- Cutover Phase 0→5 + routing rollback  
 - Async workers + JPA state machine  
 - Kafka topic / consumer groups / outbox / idempotency  
 - Replay API safety rails  

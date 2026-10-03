@@ -25,12 +25,15 @@ If you don’t clarify, the interviewer may think you claimed trading-platform e
 
 | Round | Focus | Lessons |
 |-------|--------|---------|
-| Recruiter / HR | Story, Why IB, notice period | Start here → Framing → Behavioral → Cheat sheet |
-| Technical screen | 2 Barclays bullets + Java/SQL | Backend basics + Migration or Tokenization + Coding/SQL |
-| Deep technical | Design + failure modes | Tokenization, Async, Kafka, Replay, System design |
-| Hiring manager | Ownership, judgment, culture | Behavioral + RAG safety (HITL) + OSS |
+| Recruiter / HR | Story, Why IB, notice period | Personal facts → Framing → Traps → Behavioral → Cheat sheet |
+| Technical screen | 2 Barclays bullets + Java/SQL | Tokenization or Async + Java/Spring core + Coding solutions |
+| Deep technical | Design + failure modes | Tokenization (proof/recovery/cutover), Async, Kafka, System design |
+| Hiring manager | Ownership, judgment, culture | Behavioral + RAG HITL + Traps |
+| Every week | Practice loop | [7-day drills & mocks](#/16-drill-schedule) |
 
-**Rule:** Don’t skim every lesson the night before. Pick **2 Barclays bullets** you can teach on a whiteboard. Know the others at “30-second pitch” level.
+**Rule:** Don’t skim every lesson the night before. Pick **2 Barclays bullets** you can teach on a whiteboard (recommended: **Tokenization** + **Async**). Know the others at “30-second pitch” level.
+
+**Done means blind:** draw diagram, speak 2 minutes, answer 3 hard follow-ups — then Mark done.
 
 ## How lessons are structured
 
@@ -40,13 +43,6 @@ Each lesson roughly follows:
 2. **ELI5** callouts (simple analogies)
 3. **On your resume** (exact story + numbers)
 4. **Interview Q&A** (what they’ll ask + what to say)
-
-**Barclays deep dives** are written as full interview stories:
-
-1. **The whole story** — read until you can tell it without notes  
-2. **30-second pitch** + **2-minute script** — speak aloud  
-3. Concepts + architecture + numbers  
-4. Deep Q&A + practice checklist  
 
 Use **Mark done** in the top bar when you’ve practiced that lesson out loud once.
 
