@@ -1,87 +1,85 @@
 # RAG ops agent
 
-**Resume line:** You shipped a production RAG and LLM ops agent in Python with LangChain and PgVector. The agent uses incident runbooks plus ServiceNow and Jira APIs. Suggestions are retrieval-grounded. A human stays in the loop. No unattended production changes. MTTR fell by about 40% on the pilot set.
+**Resume:** Prod **RAG/LLM** ops agent — **Python/LangChain/PgVector** over runbooks + **ServiceNow/Jira**. Retrieval-grounded. **HITL** — no unattended prod changes. **MTTR −40%** on pilot.
+
+**CAUTION:** Never say LLM auto-fixes production.
 
 ---
 
-## 1. Say this first (30 seconds)
+## 1. Say this first (30s)
 
-> I built a Python LangChain RAG assistant over runbooks in PgVector. It drafts grounded next steps for ops through ServiceNow and Jira. A human approves production actions. MTTR fell by about 40% on the pilot class.
-
-**CAUTION:** Do not say the LLM fixes production alone.
+> LangChain RAG over runbooks in PgVector; drafts grounded next steps for ops via ServiceNow/Jira; human approves prod actions; MTTR ~−40% on pilot class.
 
 ---
 
-## 2. Words you must know
+## 2. Words
 
-| Word | Meaning |
-|------|---------|
-| LLM | Model that predicts text. It can invent facts |
-| Embedding | Numeric vector that represents meaning |
-| RAG | Retrieve documents first. Then generate an answer |
-| PgVector | Postgres extension for vector search |
-| HITL | Human in the loop. A person approves risky actions |
-| MTTR | Mean time to resolve an incident |
+| Word | Meaning | Trap |
+|------|---------|------|
+| LLM | Predicts text; can hallucinate | Not source of truth |
+| Embedding | Meaning as vector | Retrieval quality bottleneck |
+| RAG | Retrieve then generate | Better than stale fine-tune for runbooks |
+| Chunking | Split docs for embed/retrieve | Size vs context trade-off |
+| PgVector | Vectors in Postgres | Joins + metadata filters |
+| HITL | Human approves risky acts | Required line for IB |
+| MTTR | Mean time to resolve | Measure before/after pilot |
+| Prompt injection | Untrusted text steers tools | Delimit + allowlist tools |
 
-> **ELI5:** Do not force the model to memorize every runbook. Let it open the correct page first.
+> **ELI5:** Open the right runbook page first; then answer.
 
 ---
 
 ## 3. How it works
 
 ```
-Incident in ServiceNow
-  → agent receives text
-  → retrieve top runbook chunks from PgVector
-  → draft suggestion with citations
-  → optional guarded tools (ticket note, Jira)
-  → human reviews before risky actions
+ServiceNow incident
+  → embed/query → top-k runbook chunks (PgVector ± filters)
+  → LLM drafts suggestion + citations
+  → guarded tools (notes/Jira) 
+  → human approves before risky prod actions
 ```
 
-Safety rules:
+| Control | Rule |
+|---------|------|
+| Grounding | Prefer retrieved steps; cite chunk ids |
+| Empty retrieval | No guess — escalate human |
+| Untrusted ticket text | Delimit as data; not instructions |
+| Tools | Allowlist per step; no broad shell |
+| Eval | Golden questions; block regressions in CI if you have them |
+| PII | Redact before model when needed |
 
-- Treat ticket text as untrusted data.
-- Allow only listed tools.
-- If retrieval is empty or weak, escalate to a human.
-- Do not execute destructive production actions without approval.
+**MTTR:** same incident class, before vs after, HITL still on. Fill sample size in Personal facts.
 
 ---
 
-## 4. Say this (2 minutes)
+## 4. Say this (2 min)
 
-> Ops spent time searching runbooks during repetitive incidents. I built a RAG assistant in Python with LangChain. Runbook chunks live in Postgres with PgVector. The agent retrieves relevant steps, then drafts a grounded suggestion. It can update ticket notes through APIs, but a human remains in the loop for production actions. We measured MTTR on a pilot incident class before and after. MTTR fell by about 40%. The value is faster context, not unsupervised remediation.
+> Ops lost time searching runbooks. RAG assistant: chunk+embed runbooks into PgVector; retrieve; draft grounded suggestion; optional ticket updates; human in loop for prod. Pilot MTTR −~40%. Value = faster context + consistency, not unsupervised remediation. Injection defenses: delimit ticket text, allowlist tools, fail closed on weak retrieval.
 
 ---
 
 ## 5. Top questions
 
-<details>
-<summary>How do you reduce hallucinations?</summary>
-
-Retrieve first. Require citations. Refuse weak retrieval. Keep HITL for actions. Use a small eval set.
-
+<details><summary>Hallucinations?</summary>
+Retrieve first; citations; refuse weak retrieval; HITL; eval set.
 </details>
-
-<details>
-<summary>What is prompt injection here?</summary>
-
-Untrusted ticket text tries to change tool behavior. Delimit that text. Allowlist tools. Do not let retrieved text raise privilege.
-
+<details><summary>RAG vs fine-tune?</summary>
+Runbooks change; RAG stays fresh and citable.
 </details>
-
-<details>
-<summary>Why RAG instead of fine-tuning?</summary>
-
-Runbooks change. RAG stays current. You can show the retrieved source.
-
+<details><summary>Why Postgres vectors?</summary>
+One ops model, SQL filters, ACID metadata, less new infra.
+</details>
+<details><summary>What must never be automated?</summary>
+Destructive prod changes / unattended remediations without approval.
 </details>
 
 ---
 
 ## 6. Blind check
 
-- [ ] Draw retrieve → generate → human approve.
-- [ ] Say the HITL safety line.
-- [ ] Speak the 30-second answer.
+- [ ] Draw retrieve → generate → HITL
+- [ ] HITL safety one-liner
+- [ ] Injection defense two bullets
+- [ ] Speak 30s cold
 
 Next: [Samsung, OSS, CodeReviewer](#/11-samsung-oss-project)

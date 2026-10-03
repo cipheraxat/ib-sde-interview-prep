@@ -1,75 +1,74 @@
 # Jenkins, fat JAR, Veracode
 
-**Resume line:** You packaged the service as an executable fat JAR. You wired Jenkins pipelines through test, staging, and production. Release cycle time fell by about 25%. Veracode stayed at zero critical findings.
+**Resume:** Executable **fat JAR** + **Jenkins** promote test→staging→prod. Release cycle **−25%**. **Veracode** zero critical.
 
 ---
 
-## 1. Say this first (30 seconds)
+## 1. Say this first (30s)
 
-> I package the Spring Boot service as a fat JAR. Jenkins builds, tests, scans, and promotes the artifact through test, staging, and production. Release cycle time fell by about 25%. Veracode stayed at zero criticals.
+> Fat JAR + Jenkins build/test/scan/promote across envs. ~25% faster release cycle; Veracode criticals stayed at zero.
 
 ---
 
-## 2. Words you must know
+## 2. Words
 
 | Word | Meaning |
 |------|---------|
-| Fat JAR | One file with your code and dependencies |
-| Jenkins pipeline | Automated build, test, scan, and deploy steps |
-| Veracode | SAST tool. Finds security issues in the build |
-| Promote | Move the same artifact to the next environment |
+| Fat/uber JAR | Code + deps (+ embedded server) one runnable |
+| Pipeline | Automated stages same every commit |
+| Promote | Same artifact → next env |
+| Veracode / SAST | Static scan for vulns in CI |
+| Smoke test | Tiny prod-like check after deploy |
+| Rollback | Prior JAR / prior release |
 
 ---
 
 ## 3. How it works
 
 ```
-Checkout → Maven build → unit tests → integration tests
-  → Veracode scan → package fat JAR
-  → deploy test → smoke → gate → staging → production
+Checkout → mvn test/package → Veracode gate
+  → fat JAR → deploy Test → smoke → approve
+  → Staging → Prod
 ```
 
-Environment order: Dev → Test or SIT → Staging → Prod.
+**Envs:** Dev → Test/SIT → Staging → Prod.  
+**Secrets:** Jenkins credentials/vault — never Git.  
+**Config:** Spring profiles / external config; not baked secrets in JAR.  
+**25%:** define as commit→prod time for **your** service (fill evidence in Personal facts).
 
-Secrets stay in Jenkins credentials or a vault. Secrets do not stay in Git.
+| Veracode finds | Examples |
+|----------------|----------|
+| Injection patterns, bad crypto, hardcoded secrets | Gate fails on critical |
 
 ---
 
-## 4. Say this (2 minutes)
+## 4. Say this (2 min)
 
-> Before the pipeline, packaging and promotion had manual steps and delays. I standardized on a Spring Boot fat JAR and a Jenkins pipeline. Every change gets the same build, tests, and Veracode gate. We promote one artifact across environments. That cut release cycle time by about 25% for the service and kept critical Veracode findings at zero.
+> Manual packaging caused delay and drift. Standardized Spring Boot fat JAR + Jenkins: every change gets build, tests, Veracode, then promote one artifact. Cut cycle time ~25%; kept critical findings at zero; rollback = previous artifact.
 
 ---
 
 ## 5. Top questions
 
-<details>
-<summary>What is Veracode?</summary>
-
-A static application security test in CI. It blocks severe issues before production.
-
+<details><summary>Prevent bad prod?</summary>
+Tests + Veracode + promotion gates + smoke + rollback plan.
 </details>
-
-<details>
-<summary>How do you prevent a bad prod deploy?</summary>
-
-Tests, Veracode gates, environment promotion, smoke checks, and rollback to the previous JAR.
-
+<details><summary>Build tool?</summary>
+Maven multi-module; `test`/`package`; modules mirror api/core/persistence.
 </details>
-
-<details>
-<summary>How does config differ by environment?</summary>
-
-Spring profiles and external config. Secrets are not baked into the JAR.
-
+<details><summary>Config by env?</summary>
+Profiles + externalized props; secrets injected at runtime.
+</details>
+<details><summary>Zero critical — how kept?</summary>
+CI gate blocks; fix before merge; periodic scans on main.
 </details>
 
 ---
 
 ## 6. Blind check
 
-- [ ] List the pipeline stages in order.
-- [ ] Explain fat JAR in one sentence.
-- [ ] Speak the 30-second answer.
+- [ ] Pipeline stages in order
+- [ ] Fat JAR one-liner
+- [ ] Speak 30s cold
 
 Next: [RAG ops agent](#/10-rag-ops-agent)

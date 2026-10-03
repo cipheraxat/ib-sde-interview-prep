@@ -1,102 +1,101 @@
 # Spring Boot refactor
 
-**Resume line:** You refactored Core Java into a Maven multi-module Spring Boot service with Spring Data JPA. You applied OOP, SOLID, and design patterns. You added JUnit and Mockito tests, integration tests, and code reviews.
+**Resume:** Core Java → **Maven multi-module Spring Boot** + **Spring Data JPA**. OOP/SOLID/patterns. **JUnit/Mockito**, integration tests, code reviews.
 
 ---
 
-## 1. Say this first (30 seconds)
+## 1. Say this first (30s)
 
-> I moved legacy Core Java into a Maven multi-module Spring Boot service. The service uses Spring Data JPA, clear layers, and JUnit with Mockito. The code is easier to test and safer to change.
+> Legacy Core Java → Maven multi-module Spring Boot with JPA, clear layers, constructor DI, JUnit/Mockito. Safer to change; failure paths tested.
 
 ---
 
-## 2. Words you must know
+## 2. Words
 
-| Word | Meaning |
-|------|---------|
-| Core Java | Plain Java with manual wiring and uneven structure |
-| Spring Boot | Framework with DI, web server, config profiles, and easy packaging |
-| DI | Dependency injection. Spring supplies collaborators |
-| Maven module | A build unit with a clear boundary |
-| JPA repository | Interface that maps entities to SQL tables |
-| `@Transactional` | Method runs inside a database transaction |
+| Word | Meaning | Probe |
+|------|---------|-------|
+| Core Java | Manual wiring, uneven structure | What you left |
+| Spring Boot | DI, embedded server, profiles, actuator | Why banks use it |
+| DI | Spring supplies deps (prefer ctor) | Testability |
+| Module | Maven boundary (api/core/persistence) | Dependency direction |
+| JPA repo | Entity ↔ table; derived/`@Query` | Still know SQL |
+| `@Transactional` | DB txn around method | Rollback defaults |
+| Fat JAR | App + deps + server one artifact | Bullet 7 |
 
 ---
 
 ## 3. How it works
 
-Request path:
-
 ```
-HTTP → Controller → Service → Repository / JPA → DB
-                 → Vendor client (outside long DB transactions)
+HTTP → @RestController → @Service → JpaRepository → DB
+                      ↘ VendorClient (no long txn around HTTP)
 ```
 
-Typical modules:
+**Modules:** `api` (HTTP) · `core` (rules) · `persistence` (entities/repos)
 
-- `api` — HTTP layer
-- `core` — business rules
-- `persistence` — entities and repositories
+**SOLID map**
 
----
-
-## 4. SOLID in your words
-
-| Idea | Your example |
-|------|----------------|
-| Single responsibility | Vendor client is not the recon service |
-| Dependency inversion | Depend on a `VendorClient` interface |
-| State transitions | Step status changes stay behind a service method |
-
----
-
-## 5. Test example
+| Idea | Example |
+|------|---------|
+| SRP | VendorClient ≠ ReconService ≠ ReplayController |
+| DIP | Depend on `VendorClient` interface |
+| Encapsulation | Status transitions only via service methods |
+| Patterns | Adapter (vendor), State (step), Strategy (retry) |
 
 ```java
-@Test
-void marksFailedOnTimeout() {
-  when(vendorClient.update(any())).thenThrow(new SocketTimeoutException());
-  // assert status == FAILED, not SUCCESS
+@Service
+public class PaymentSyncService {
+  private final VendorClient vendor;
+  private final StepRepository steps;
+  public PaymentSyncService(VendorClient vendor, StepRepository steps) {
+    this.vendor = vendor; this.steps = steps;
+  }
+}
+@Test void marksFailedOnTimeout() {
+  when(vendor.update(any())).thenThrow(new SocketTimeoutException());
+  // assert FAILED, not SUCCESS
 }
 ```
 
 ---
 
-## 6. Say this (2 minutes)
+## 4. Traps / rules
 
-> The old code was Core Java with weak structure and weak tests. I refactored it into Spring Boot with Maven modules. Controllers handle HTTP. Services hold business rules. Repositories persist step state. Constructor injection makes unit tests simple with Mockito. We keep vendor HTTP calls out of long database transactions. Code review and tests catch bad failure handling before release.
-
----
-
-## 7. Top questions
-
-<details>
-<summary>@RestController vs @Controller?</summary>
-
-`@RestController` equals `@Controller` plus `@ResponseBody`. Return values become JSON.
-
-</details>
-
-<details>
-<summary>What does @Transactional do?</summary>
-
-Spring opens a DB transaction around the method. Unchecked exceptions trigger rollback by default.
-
-</details>
-
-<details>
-<summary>Why a fat JAR later?</summary>
-
-One runnable artifact. The same shape runs in each environment.
-
-</details>
+| Topic | Say |
+|-------|-----|
+| `@RestController` | `@Controller` + `@ResponseBody` |
+| Rollback | Unchecked → rollback by default; checked often not |
+| Self-invoke | Same-class call bypasses proxy → no txn |
+| Long txn | Never wrap vendor HTTP in one `@Transactional` |
+| N+1 | Lazy loops; fix join fetch / entity graph |
+| Pool | HikariCP size ≈ concurrent DB work |
 
 ---
 
-## 8. Blind check
+## 5. Say this (2 min)
 
-- [ ] Draw controller → service → repository.
-- [ ] Explain one `@Transactional` trap.
-- [ ] Speak the 30-second answer.
+> Old Core Java was hard to test. Refactor to Spring Boot modules: controllers HTTP, services rules, repos state. Ctor injection + Mockito for timeout→FAILED tests. Vendor calls outside long DB transactions. Reviews catch missing failure handling before Jenkins promote.
+
+---
+
+## 6. Top questions
+
+<details><summary>Bean scopes?</summary>
+Singleton default; prototype per inject; request/session for web.
+</details>
+<details><summary>How Spring Boot auto-config?</summary>
+Classpath + `@ConditionalOn*`; starters pull opinionated defaults you can override.
+</details>
+<details><summary>Testing pyramid here?</summary>
+Unit (service+mocks) · slice/integration (repo/HTTP) · pipeline smoke.
+</details>
+
+---
+
+## 7. Blind check
+
+- [ ] Draw layers + no-txn-over-HTTP
+- [ ] One `@Transactional` trap
+- [ ] Speak 30s + test idea
 
 Next: [Kafka events](#/07-kafka)

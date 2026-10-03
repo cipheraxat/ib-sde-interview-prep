@@ -5,9 +5,10 @@
 | Problem | Fix |
 |---------|-----|
 | Long vague prose | Fixed page order: 30s → words → how → detail → 2min → Q&A → blind check |
-| Hard to scan | Tables, short lists, one topic per block |
-| Unclear interview use | Spoken scripts and blind checks on each deep dive |
-| PII too dense | Same order. Proof, recovery, and cutover stay detailed but split |
+| Then too sparse | Densified: more matrices, SQL/code, traps, probe Qs per page |
+| Hard to scan | Tables first; short STE sentences |
+| Unclear interview use | Spoken scripts + blind checks |
+| PII | Proof / recovery / cutover kept full, packed into tables |
 
 ## Study rule
 

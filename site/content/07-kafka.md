@@ -1,96 +1,84 @@
 # Kafka events
 
-**Resume line:** Your Spring Boot services publish payment and account-status events to Apache Kafka. Audit and reporting consume the events. Downstream work does not block TWS batch completion.
+**Resume:** Spring Boot publishes **payment/account-status** events to **Kafka**. Audit + reporting consume async. Does **not** block TWS batch completion.
 
 ---
 
-## 1. Say this first (30 seconds)
+## 1. Say this first (30s)
 
-> After a payment or account step succeeds, we publish a Kafka event. Audit and reporting consume the event on their own. The TWS batch does not wait for those consumers.
+> After step SUCCESS we publish Kafka. Audit and reporting consume independently. TWS batch does not wait on them.
 
 ---
 
-## 2. Words you must know
+## 2. Words
 
-| Word | Meaning |
-|------|---------|
-| Topic | Named stream of messages |
-| Partition | Split of a topic for parallel consumers |
-| Producer | Writer. Your Spring Boot service |
-| Consumer group | Set of consumers that share work |
-| Offset | Position in a partition |
-| Key | Example: `accountId`. Keeps one account on one partition |
-| At-least-once | Duplicates can occur. Consumers must be idempotent |
-| Outbox | Write business row and outbox row in one DB transaction. A publisher sends to Kafka later |
+| Word | Meaning | Use |
+|------|---------|-----|
+| Topic | Named log of messages | `payment.status` |
+| Partition | Parallel slice of topic | Scale consumers |
+| Key | e.g. `accountId` | Same account → same partition → order |
+| Producer | Your service | After durable SUCCESS |
+| Consumer group | Competing consumers; each group gets all msgs | audit vs reporting |
+| Offset | Read position | Commit carefully |
+| At-least-once | Dupes possible | Idempotent sink |
+| Outbox | Business+outbox row one DB txn → publisher → Kafka | No lost event after commit |
+| DLQ | Dead letter after N fails | Poison messages |
+| Lag | Unconsumed messages | Primary health metric |
 
-> **ELI5:** Kafka is a durable inbox. Many teams read the same event without blocking the sender.
+> **ELI5:** Durable inbox; many teams read without blocking sender.
 
 ---
 
 ## 3. How it works
 
 ```
-Spring service
-  → commit step SUCCESS (+ outbox row)
-  → publisher sends to topic payment.status (key=accountId)
-       → consumer group: audit
-       → consumer group: reporting
+Service txn: step SUCCESS + outbox row
+  → publisher → topic (key=accountId)
+       → CG audit (idempotent store)
+       → CG reporting
+       → fails → retry → DLQ + alert
 ```
 
-Payload rules:
+**Payload:** `eventId`, status, timestamps, internal ids/tokens — **no raw PII**.  
+**Order:** per key/partition only (not global).  
+**Safe delivery line:** at-least-once + idempotent consumer (store `eventId`). Do not claim exactly-once end-to-end unless you built it.
 
-- Include event id, status, timestamps, internal ids or tokens.
-- Do not put raw PII in the event.
-
----
-
-## 4. Delivery truth
-
-| Term | Meaning |
-|------|---------|
-| At-most-once | Can lose messages. Bad for audit |
-| At-least-once | Can duplicate. Use idempotency keys |
-| Exactly-once | Hard end to end. Do not claim it unless you built it |
-
-**Safe line:** At-least-once delivery plus an idempotent consumer.
+| Semantic | Risk |
+|----------|------|
+| At-most-once | Loss — bad for audit |
+| At-least-once | Dupes — need idempotency |
+| Exactly-once | Hard; usually “effectively once” at sink |
 
 ---
 
-## 5. Say this (2 minutes)
+## 4. Say this (2 min)
 
-> Batch completion must not wait on audit and reporting. After we persist a successful step, we publish a Kafka event. We prefer an outbox write in the same database transaction so we do not lose the event after commit. Consumers in separate groups process audit and reporting. Events use account id as the key for per-account order. Consumers store event ids to skip duplicates. Poison messages go to a DLQ after limited retries.
+> Batch must finish without waiting on audit/reporting. Persist SUCCESS, write outbox in same txn, publish async. Key by accountId for per-account order. Separate consumer groups. Consumers skip duplicate eventIds. Poison → limited retry → DLQ. Monitor lag, errors, DLQ depth. Tokens only in payload.
 
 ---
 
-## 6. Top questions
+## 5. Top questions
 
-<details>
-<summary>What is in the payload?</summary>
-
-Tokens or internal ids, status, timestamps, and event id. No raw PII.
-
+<details><summary>Why not HTTP to audit?</summary>
+Coupling + blocking + multi-consumer fanout pain. Kafka decouples and buffers.
 </details>
-
-<details>
-<summary>How do you handle a bad message?</summary>
-
-Retry with a limit. Then send the message to a DLQ. Alert humans.
-
+<details><summary>Dual-write problem?</summary>
+DB commit then Kafka fail loses event — outbox fixes.
 </details>
-
-<details>
-<summary>What do you monitor?</summary>
-
-Consumer lag, error rate, DLQ depth, and process latency.
-
+<details><summary>Rebalance / poison?</summary>
+Short processing; idempotent handlers; DLQ; alert; do not block partition forever.
+</details>
+<details><summary>Partition count?</summary>
+≥ peak parallel consumers; key cardinality; re-partition is costly — start sensible.
 </details>
 
 ---
 
-## 7. Blind check
+## 6. Blind check
 
-- [ ] Draw producer → topic → two consumer groups.
-- [ ] Explain outbox in three sentences.
-- [ ] Say the safe delivery line.
+- [ ] Draw outbox → topic → 2 CGs
+- [ ] Safe delivery one-liner
+- [ ] Why no PII in events
+- [ ] Speak 2 min cold
 
 Next: [Batch replay API](#/08-replay-api)
