@@ -1,6 +1,6 @@
 .DS_Store
-*.aux
-*.log
-*.out
 .idea/
 .vscode/
+.vercel/
+site/.vercel
+site/node_modules
