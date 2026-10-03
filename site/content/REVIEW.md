@@ -1,30 +1,22 @@
-# Notes review — what’s effective (and what we fixed)
+# Notes review
 
-## Verdict on the old Markdown dump
+## What changed for golden-source deep dives
 
-| Issue | Why it hurt studying | Fix in this site |
-|-------|----------------------|------------------|
-| Dense walls of text | Hard to skim before interviews | Lesson nav + short sections + callouts |
-| Assumed jargon | Easy to freeze if you forgot TWS/RAG/outbox | “Teach first” then resume story |
-| Cryptic B1–B8 labels | No context | Plain titles + sections |
-| Weak coding/design pages | Broken HTML leftovers | Rewritten drills |
-| No progress | Easy to feel lost | Mark done + progress bar |
-| No round plan | Over-study everything | Start-here study matrix |
+| Problem | Fix |
+|---------|-----|
+| Long vague prose | Fixed page order: 30s → words → how → detail → 2min → Q&A → blind check |
+| Hard to scan | Tables, short lists, one topic per block |
+| Unclear interview use | Spoken scripts and blind checks on each deep dive |
+| PII too dense | Same order. Proof, recovery, and cutover stay detailed but split |
 
-## What was already strong
+## Study rule
 
-- Correct IB framing (payment integration ≠ trading)  
-- IBM TWS disambiguation  
-- Ownership language table  
-- Numbers with meanings  
-- Failure-mode thinking (timeout ⇒ FAILED, HITL for LLM)
+A page is done only when you can teach it with the site closed.
 
-## How to use this site effectively
+1. Draw the diagram.
+2. Speak 2 minutes.
+3. Answer 3 hard questions.
 
-1. Do **Start here → Backend basics → Framing** once fully  
-2. Master **Tokenization** and **Async** as deep stories  
-3. Skim Kafka / Replay / CI / RAG for 30s pitches  
-4. Practice **Coding/SQL** with a timer  
-5. Night before: **Cheat sheet** only  
+## Source style
 
-Speak answers out loud. Reading ≠ interview ready.
+Notes follow Simplified Technical English ideas from [0xpili/simplified-technical-english](https://github.com/0xpili/simplified-technical-english): short sentences, active voice, clear commands, no vague fillers.

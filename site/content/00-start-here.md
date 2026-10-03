@@ -35,16 +35,23 @@ If you don’t clarify, the interviewer may think you claimed trading-platform e
 
 **Done means blind:** draw diagram, speak 2 minutes, answer 3 hard follow-ups — then Mark done.
 
-## How lessons are structured
+## How each deep dive page works
 
-Each lesson roughly follows:
+Every Barclays deep dive uses the same order. Read top to bottom. Stop when the blind check passes.
 
-1. **Teach the concept** (assume you forgot college notes)
-2. **ELI5** callouts (simple analogies)
-3. **On your resume** (exact story + numbers)
-4. **Interview Q&A** (what they’ll ask + what to say)
+| Block | Purpose |
+|-------|---------|
+| 1. Say this first | 30-second answer |
+| 2. Words you must know | Short definitions |
+| 3. How it works | Diagram and flow |
+| 4. Detail blocks | Proof, recovery, rules, or ownership |
+| 5. Say this (2 minutes) | Longer spoken answer |
+| 6. Top questions | Expand only if needed |
+| 7. Blind check | Pass this before Mark done |
 
-Use **Mark done** in the top bar when you’ve practiced that lesson out loud once.
+Writing style: short sentences, one idea per line, active voice (Simplified Technical English).
+
+Use **Mark done** only after you speak the answer with no notes.
 
 ## Your resume at a glance (memorize)
 

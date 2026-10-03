@@ -1,88 +1,56 @@
-# Spring Boot refactor (Barclays bullet 4)
+# Spring Boot refactor
 
-## Resume bullet
+**Resume line:** You refactored Core Java into a Maven multi-module Spring Boot service with Spring Data JPA. You applied OOP, SOLID, and design patterns. You added JUnit and Mockito tests, integration tests, and code reviews.
 
-> Refactored **Core Java** into a **Maven** multi-module **Spring Framework / Spring Boot** service with **Spring Data JPA**, applying OOP, SOLID, and design patterns; **JUnit/Mockito** unit testing, integration testing, and code reviews.
+---
 
-## Teach first: Core Java vs Spring Boot service
+## 1. Say this first (30 seconds)
 
-**Core Java app** (typical legacy shape):
+> I moved legacy Core Java into a Maven multi-module Spring Boot service. The service uses Spring Data JPA, clear layers, and JUnit with Mockito. The code is easier to test and safer to change.
 
-- `main` methods, manual wiring
-- Inconsistent config
-- Harder to test
-- Custom HTTP handling or ad-hoc clients
-- SQL scattered as strings
+---
 
-**Spring Boot service:**
+## 2. Words you must know
 
-- Clear layers (controller/service/repo)
-- Dependency injection
-- Profiles, actuators, standardized packaging
-- Test slices and mocks
+| Word | Meaning |
+|------|---------|
+| Core Java | Plain Java with manual wiring and uneven structure |
+| Spring Boot | Framework with DI, web server, config profiles, and easy packaging |
+| DI | Dependency injection. Spring supplies collaborators |
+| Maven module | A build unit with a clear boundary |
+| JPA repository | Interface that maps entities to SQL tables |
+| `@Transactional` | Method runs inside a database transaction |
 
-> **ELI5:** Refactoring into Spring Boot is reorganizing a messy toolbox into labeled drawers so the next engineer (and future you) can find the hammer without injury.
+---
 
-## Maven multi-module
+## 3. How it works
 
-**Maven** builds Java projects. Multi-module means one repo/parent with modules such as:
+Request path:
 
-- `integration-api` (HTTP layer)
-- `integration-core` (business logic)
-- `integration-persistence` (JPA entities/repos)
-
-Benefits: clearer boundaries, reuse, faster incremental builds, cleaner dependency direction.
-
-## Dependency Injection (DI)
-
-Instead of `new VendorClient()` everywhere, Spring injects dependencies:
-
-```java
-@Service
-public class PaymentSyncService {
-  private final VendorClient vendorClient;
-  private final StepRepository steps;
-
-  public PaymentSyncService(VendorClient vendorClient, StepRepository steps) {
-    this.vendorClient = vendorClient;
-    this.steps = steps;
-  }
-}
+```
+HTTP → Controller → Service → Repository / JPA → DB
+                 → Vendor client (outside long DB transactions)
 ```
 
-Why interviewers care: testability (mock VendorClient), swappable implementations, less hidden coupling.
+Typical modules:
 
-## Spring Data JPA
+- `api` — HTTP layer
+- `core` — business rules
+- `persistence` — entities and repositories
 
-**JPA** maps classes to tables. **Spring Data JPA** gives repository interfaces:
+---
 
-```java
-public interface StepRepository extends JpaRepository<BatchStepExecution, Long> {
-  List<BatchStepExecution> findByStatusAndBusinessDate(String status, LocalDate date);
-}
-```
+## 4. SOLID in your words
 
-You still must understand SQL — frameworks don’t replace indexing/recon thinking.
+| Idea | Your example |
+|------|----------------|
+| Single responsibility | Vendor client is not the recon service |
+| Dependency inversion | Depend on a `VendorClient` interface |
+| State transitions | Step status changes stay behind a service method |
 
-## OOP / SOLID (practical, not textbook dump)
+---
 
-Talk through **your** service:
-
-| Idea | Example in your system |
-|------|------------------------|
-| Encapsulation | Step state transitions behind a service method |
-| Single Responsibility | VendorClient ≠ ReconService ≠ ReplayController |
-| Open/Closed | New vendor error mapper without rewriting core loop |
-| Dependency Inversion | Depend on `VendorClient` interface, not a concrete SDK class |
-| Patterns | Strategy for retry policy; State for step lifecycle; Adapter for vendor API |
-
-## Testing
-
-- **Unit tests:** service logic with Mockito mocks  
-- **Integration tests:** DB + HTTP slices where valuable  
-- **Code reviews:** catch missing failure handling, bad transactions, secret leaks  
-
-Example mindset:
+## 5. Test example
 
 ```java
 @Test
@@ -92,31 +60,43 @@ void marksFailedOnTimeout() {
 }
 ```
 
-## 30-second pitch
+---
 
-> I refactored legacy Core Java into a Maven multi-module Spring Boot service with JPA, clear layering, SOLID-minded design, and JUnit/Mockito coverage — making the integration code testable and safer to change.
+## 6. Say this (2 minutes)
 
-## Interview Q&A
+> The old code was Core Java with weak structure and weak tests. I refactored it into Spring Boot with Maven modules. Controllers handle HTTP. Services hold business rules. Repositories persist step state. Constructor injection makes unit tests simple with Mockito. We keep vendor HTTP calls out of long database transactions. Code review and tests catch bad failure handling before release.
+
+---
+
+## 7. Top questions
 
 <details>
 <summary>@RestController vs @Controller?</summary>
 
-`@RestController` = `@Controller` + `@ResponseBody` — return values serialize to JSON directly.
+`@RestController` equals `@Controller` plus `@ResponseBody`. Return values become JSON.
 
 </details>
 
 <details>
 <summary>What does @Transactional do?</summary>
 
-Wraps a method in a DB transaction. Default rollback on unchecked exceptions. Critical when writing business row + outbox/step updates together.
+Spring opens a DB transaction around the method. Unchecked exceptions trigger rollback by default.
 
 </details>
 
 <details>
-<summary>Why fat JAR later (bullet 7)?</summary>
+<summary>Why a fat JAR later?</summary>
 
-Spring Boot packs app + dependencies into one runnable artifact for consistent deploys across envs.
+One runnable artifact. The same shape runs in each environment.
 
 </details>
+
+---
+
+## 8. Blind check
+
+- [ ] Draw controller → service → repository.
+- [ ] Explain one `@Transactional` trap.
+- [ ] Speak the 30-second answer.
 
 Next: [Kafka events](#/07-kafka)

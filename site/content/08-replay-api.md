@@ -1,85 +1,82 @@
-# Batch replay API (Barclays bullet 6)
+# Batch replay API
 
-## Resume bullet
+**Resume line:** You built a Spring Boot API for batch replay and step-level recovery after TWS failures. Ops can re-trigger failed payment-load steps without manual database edits.
 
-> Built an internal Spring Boot service for **batch replay** and **step-level recovery** after TWS job failures, exposing APIs for operations to re-trigger failed payment-load steps **without manual database intervention**.
+---
 
-## Teach first: why replay exists
+## 1. Say this first (30 seconds)
 
-Batch systems fail. Vendor blips, bad files, timeouts, dependency outages.
+> When a TWS step fails, ops must not edit the database by hand. I built a replay API. The API requeues failed steps with auth and an audit log.
 
-Bad ops practice: engineer opens DB and flips `status='SUCCESS'` or requeues by hand.
+---
 
-Problems with manual DB edits:
+## 2. Words you must know
 
-- No audit trail of who did what
-- Easy to break invariants
-- Not idempotent
-- Doesn’t scale at month-end
+| Word | Meaning |
+|------|---------|
+| Replay | Controlled re-run of a failed step |
+| Manual DB edit | Direct SQL change by a human. Unsafe |
+| Audit log | Who replayed what, and when |
+| Idempotent replay | A second replay does not create a duplicate vendor side effect |
 
-Good practice: a **controlled recovery API**.
+> **ELI5:** Give ops a keycard door with a log. Do not give a screwdriver for the lock.
 
-> **ELI5:** Instead of picking a lock with a screwdriver (DB edit), give ops a keycard door (API) that logs entry and only opens the right rooms (FAILED steps).
+---
 
-## What the API should do
-
-1. Authenticate/authorize ops users  
-2. Accept step id / file id / business date filters  
-3. Verify current status is FAILED (or eligible)  
-4. Reset to PENDING / enqueue retry  
-5. Increment attempt_count  
-6. Write audit log  
-7. Return clear result  
+## 3. How it works
 
 ```
-Ops UI / curl
-   → POST /ops/replay/{stepId}
-   → validate FAILED
-   → mark PENDING + audit row
-   → worker picks up again
+Ops → POST /ops/replay/{stepId}
+   → authZ check
+   → allow only FAILED (or other eligible states)
+   → set PENDING, increase attempt_count
+   → write audit row
+   → worker picks up the step again
 ```
 
-## Idempotency & safety rails
+Safety rails:
 
-- Don’t replay SUCCESS accidentally  
-- Don’t double-run IN_PROGRESS without fencing  
-- Cap attempts; escalate to manual review after N  
-- Ensure vendor calls are safe to retry (idempotency keys)  
+- Do not replay SUCCESS by mistake.
+- Cap attempts. Escalate after the max.
+- Vendor calls must stay safe to retry.
 
-## Why interviewers love this bullet
+---
 
-It shows:
+## 4. Say this (2 minutes)
 
-- Production ownership
-- Empathy for ops
-- Security/audit awareness
-- Understanding of batch recovery (very IB/back-office relevant)
+> Month-end failures blocked downstream TWS jobs. Manual SQL updates were unsafe and had no audit trail. I exposed a Spring Boot replay API for failed payment-load steps. The API checks authorization, accepts only eligible FAILED steps, requeues work, increments attempt count, and writes an audit record. This shortens recovery time and keeps a clear trail for ops and compliance.
 
-## 30-second pitch
+---
 
-> When TWS steps failed, ops shouldn’t edit databases. I built a Spring Boot replay API that safely re-queues failed payment-load steps with authorization and audit logging, unblocking downstream jobs faster and more safely.
-
-## Interview Q&A
+## 5. Top questions
 
 <details>
-<summary>What if replay causes duplicates at vendor?</summary>
+<summary>What if replay duplicates a vendor post?</summary>
 
-Require idempotent vendor operations or dedupe keys; store vendor correlation ids; reject replay when unsafe.
+Require idempotent vendor operations or dedupe keys. Reject replay when the state is unsafe.
 
 </details>
 
 <details>
 <summary>How do you test it?</summary>
 
-Integration tests for state transitions; deny replay of SUCCESS; audit row created; authz failures return 403.
+Test state transitions. Deny replay of SUCCESS. Assert the audit row. Assert 403 without auth.
 
 </details>
 
 <details>
-<summary>How does this relate to TWS restart?</summary>
+<summary>How is this different from a TWS restart?</summary>
 
-TWS can restart jobs, but app-level step replay is finer-grained and encodes business safety rules TWS doesn’t know.
+TWS can restart jobs. App-level replay applies business safety rules that TWS does not know.
 
 </details>
+
+---
+
+## 6. Blind check
+
+- [ ] List four safety rails.
+- [ ] Speak the 30-second answer.
+- [ ] Explain why manual DB edits are bad.
 
 Next: [Jenkins, JAR, Veracode](#/09-cicd-jenkins)

@@ -1,150 +1,113 @@
-# Unix → SaaS migration (Barclays bullet 1)
+# Unix to SaaS migration
 
-## Resume bullet
+**Resume line:** You helped migrate a legacy Unix platform to a third-party SaaS on AWS. You built Java Spring Boot integration services for more than 80 TWS business processes. The path uses vendor REST APIs. The system handles more than 5,000 daily transactions across more than 100K accounts.
 
-> Contributed to migrating a legacy Unix platform to a third-party SaaS on AWS, developing Java / Spring Boot integration services for **80+** TWS-orchestrated business processes via vendor REST APIs, automating **5,000+** daily transactions across **100K+** accounts.
+---
 
-## Teach first: what was “legacy Unix”?
+## 1. Say this first (30 seconds)
 
-Many bank ops platforms grew as:
+> We replaced a legacy Unix payment-ops stack with a vendor SaaS on AWS. I built Spring Boot integration services. IBM TWS starts the batch jobs. The jobs call our REST APIs. The APIs call the vendor. The scope covers more than 80 workflows, more than 5,000 daily transactions, and more than 100K accounts.
 
-- Shell scripts on Unix/Linux servers
-- File drops on shared disks (NFS)
-- Cron or scheduler triggering overnight jobs
-- Direct DB updates / flat files between systems
-- Little automated testing; knowledge in people’s heads
+**CAUTION:** TWS on your resume is IBM Workload Scheduler. It is not IB Trader Workstation. Say this early.
 
-It works for years — until change becomes slow, risky, and hard to audit.
+---
 
-> **ELI5:** Imagine accounting done with paper ledgers and messengers. Migration moves you to a modern vendor system, but you still need a reliable “messenger service” (your Spring Boot integration layer) so old processes and new systems stay in sync during cutover.
+## 2. Words you must know
 
-## What is SaaS?
-
-**SaaS = Software as a Service** — vendor hosts the application (often on cloud). You integrate via APIs instead of owning all the software.
-
-Here: vendor product runs on **AWS**. Your bank still owns:
-
-- Security rules (especially PII)
-- Integration correctness
-- Ops recovery
-- Reconciliation
-
-## What is AWS (enough for interview)?
-
-Amazon Web Services = cloud infrastructure. Vendor hosts there. You may not manage their VPC, but you understand:
-
-- Data leaves on-prem through approved channels
-- Network/security boundaries matter
-- Cloud ≠ “no compliance work”
-
-## IBM TWS (Workload Scheduler) — learn cold
-
-**IBM TWS** schedules and orchestrates batch jobs.
-
-| Term | Meaning |
+| Word | Meaning |
 |------|---------|
-| Job | One unit of work (script, command, HTTP call) |
-| Job stream | DAG of jobs with dependencies |
-| Dependency | Job B waits for Job A success |
-| Calendar | When it may run (nightly, month-end) |
-| Restart | Re-run from failed point |
+| Legacy Unix | Old scripts, file drops, and scheduled jobs on Unix or Linux |
+| SaaS | Vendor hosts the app. You integrate through APIs |
+| IBM TWS | Batch scheduler. Jobs and job streams with dependencies |
+| Job stream | A DAG of jobs. Job B waits for job A |
+| Integration service | Your Spring Boot app between TWS and the vendor |
+| Parallel run | Old path and new path run together for a compare period |
+
+---
+
+## 3. How it works
 
 ```
-TWS job stream (example EOD):
-  ingest file → validate → vendor sync → recon → report
-       ↑ failures block everything downstream
+IBM TWS → Spring Boot integration (Linux) → Vendor REST → AWS SaaS
+                │
+                ▼
+         MySQL control DB (step state, audit)
 ```
 
-> **On your resume:** “80+ processes” ≈ many job definitions / workflows in scope — not 80 separate Spring Boot microservices.
+Example flow: payment status sync
 
-## Architecture (draw this)
+1. TWS starts at the schedule time.
+2. TWS calls `POST /integration/payment-sync`.
+3. The service reads pending records or an inbound file.
+4. The service validates data, maps ids, and calls the vendor API.
+5. The service stores SUCCESS or FAILED with a vendor correlation id.
+6. The service returns success to TWS only if acceptance rules pass.
+7. Downstream TWS jobs wait on this step.
 
-```
-┌─────────────┐     ┌──────────────────────┐     ┌─────────────────┐
-│  IBM TWS    │────▶│ Spring Boot          │────▶│ Vendor SaaS     │
-│  scheduler  │     │ Integration Service  │     │ REST APIs       │
-└─────────────┘     │  (your Java on Linux)│     └────────┬────────┘
-                    └──────────┬───────────┘              │
-                               │                          ▼
-                    ┌──────────▼───────────┐     ┌─────────────────┐
-                    │ MySQL control DB     │     │ AWS-hosted app  │
-                    │ step state / audit   │     └─────────────────┘
-                    └──────────────────────┘
-```
+---
 
-## 30-second pitch
+## 4. What you owned
 
-> We replaced a legacy Unix payment-ops stack with vendor SaaS on AWS. I built Spring Boot integration services that IBM TWS batch jobs call over REST, covering 80+ workflows processing 5,000+ daily transactions across 100K+ accounts.
+- Spring Boot integration services for workflows in scope.
+- REST calls to the vendor with timeouts and clear failure rules.
+- Durable step state in SQL.
+- Work with ops, vendor, and security.
 
-## End-to-end workflow example (memorize)
+**Do not say:** You migrated the full bank alone.  
+**Do say:** You contributed to the program. You owned the integration pieces in your area.
 
-**Payment status sync**
+---
 
-1. TWS triggers at 02:00 → calls `POST /integration/payment-sync`  
-2. Service reads pending records / inbound file  
-3. For each record: validate → map IDs → call vendor REST  
-4. Persist SUCCESS/FAILED + vendor correlation id  
-5. Return success to TWS only if acceptance criteria met; else fail the job  
-6. Downstream TWS jobs (recon/reporting) depend on this step  
+## 5. Failure rules (must say)
 
-## Parallel run / cutover
+| Case | Action |
+|------|--------|
+| Network blip or 5xx | Retry only if the call is idempotent |
+| 4xx business error | Do not blind-retry. Mark FAILED. Alert |
+| Vendor down | Fail fast. Do not hang the full TWS stream |
+| Timeout | Treat as failure until you confirm success |
+| Replay of the same file | Must not double-post |
 
-During migration, old and new paths often run together:
+---
 
-- Compare outputs (recon reports)
-- Feature flags / routing decide authoritative path
-- Rollback = point TWS back to old job definitions
+## 6. Say this (2 minutes)
 
-> **Interview tip:** “Zero customer impact” means no big-bang cutover without a validation window.
+> The bank moved payment operations from a legacy Unix batch stack to a vendor SaaS on AWS. My work sits in the integration layer. IBM TWS starts job streams. Those jobs call Spring Boot services that I build and run on Linux. The services call vendor REST APIs and store step state in MySQL.  
+> During migration, old and new paths can run in parallel. Compare reports find gaps before cutover. Rollback points TWS back to the old job definitions.  
+> Scale here is batch-window scale, not high-frequency trading. Correctness, timeouts, and recovery matter more than microsecond latency.
 
-## REST failure handling (must-know)
+---
 
-| Situation | Action |
-|-----------|--------|
-| Network blip / 5xx | Retry with exponential backoff **if idempotent** |
-| 4xx business error | Don’t blindly retry; mark FAILED; alert |
-| Vendor down | Circuit breaker → fail fast (don’t hang TWS stream) |
-| Timeout | Treat as failure until confirmed — never invent SUCCESS |
-| Replay same file | Must not double-post (idempotency keys) |
-
-> **ELI5:** Idempotency is “pressing the elevator button twice still only comes once.”
-
-## Why Spring Boot here?
-
-- Embedded server + health checks
-- Config profiles per environment
-- JPA for durable step state
-- Testability (JUnit/Mockito)
-- Faster than maintaining sprawling shell + ad-hoc Java
-
-## Interview Q&A
+## 7. Top questions
 
 <details>
-<summary>What challenges migrating Unix systems?</summary>
+<summary>What was hard about Unix migration?</summary>
 
-Encoding issues, undocumented edge cases, missing tests on legacy scripts, co-existence period, translating shell business rules into typed Java, ops needing familiar file interfaces during transition.
+Missing tests on old scripts. Undocumented edge cases. Character encoding. Parallel run. Translation of shell rules into typed Java.
 
 </details>
 
 <details>
-<summary>Is 5,000 transactions/day “high scale”?</summary>
+<summary>Is 5,000 transactions per day high scale?</summary>
 
-Not HFT. Load concentrates in batch windows (EOD/month-end). Design for spikes + vendor rate limits + correctness, not microscond latency.
-
-</details>
-
-<details>
-<summary>Security on REST integrations?</summary>
-
-OAuth2 client credentials or mTLS to vendor; secrets in vault; private networks; RBAC on ops APIs; audit logs; Veracode in CI.
+Not HFT. Load concentrates in EOD and month-end windows. Design for peaks, vendor rate limits, and correctness.
 
 </details>
 
 <details>
-<summary>Who were stakeholders?</summary>
+<summary>How do you secure vendor REST calls?</summary>
 
-Product owner, ops L2/L3, vendor TAM, security/architecture (tokenization), downstream audit/reporting consumers.
+OAuth2 or mTLS. Secrets in a vault. Private network paths. Audit logs. Veracode in CI.
 
 </details>
 
-Next: [PII & tokenization](#/04-pii-tokenization)
+---
+
+## 8. Blind check
+
+- [ ] Draw TWS → Spring Boot → vendor.
+- [ ] Clarify IBM TWS in one sentence.
+- [ ] List five failure rules.
+- [ ] Speak the 2-minute answer.
+
+Next: [PII and tokenization](#/04-pii-tokenization)

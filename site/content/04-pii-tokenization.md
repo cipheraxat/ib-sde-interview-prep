@@ -1,168 +1,100 @@
-# PII & tokenization (Barclays bullet 2)
+# PII and tokenization
 
-## Resume bullet
+**Resume line:** You drove the HLD and LLD. The vendor SaaS stores tokenized PII, not plaintext. DPaaS tokenizes data on-prem. DTU sends encrypted data to AWS. Batch recon confirms more than 100K accounts. Retries are fault-tolerant. There is no downtime cutover.
 
-> Drove system design (**HLD/LLD**) so vendor SaaS stores **tokenized PII**, not plaintext: on-prem data tokenized via **DPaaS**, encrypted in transit through **DTU** to AWS; batch recon confirms **100K+** accounts with fault-tolerant retries and **zero downtime**.
-
-This is often your **best system-design story**. Master **proof**, **recovery**, and **cutover** — interviewers dig here.
+This is your best design story. Learn **proof**, **recovery**, and **cutover**.
 
 ---
 
-## Teach first: What is PII?
+## 1. Say this first (30 seconds)
 
-**PII = Personally Identifiable Information** — data that can identify a person (name, national ID, account numbers tied to a person, etc.).
+> The vendor cloud must not store raw PII. We tokenize data on-prem with DPaaS. DTU sends only encrypted payloads. SQL recon proves that more than 100K accounts have an active vendor token. We use checkpointed retries. We flip traffic in phases. We do not need a downtime window.
 
-Banks treat PII as high-risk because of regulation, fraud, and reputational damage.
+---
 
-## Encryption vs hashing vs tokenization
+## 2. Words you must know
 
-| Technique | What it does | Reversible? | Typical use |
-|-----------|--------------|-------------|-------------|
-| Encryption | Scrambles with a key | Yes, with key | Protect data in transit/at rest |
-| Hashing | One-way digest | No (in practice) | Passwords, checksums |
-| Tokenization | Replace sensitive value with random token; real value in vault | Only via vault mapping | Card/account identifiers in downstream systems |
+| Word | Meaning |
+|------|---------|
+| PII | Data that can identify a person |
+| Tokenization | Replace a sensitive value with a token. The vault keeps the real value |
+| Encryption | Scramble data with a key. You can reverse it with the key |
+| DPaaS | Bank tokenization platform. Sensitive value in. Token out |
+| DTU | Approved encrypted transfer from on-prem to cloud |
+| Recon | Compare our expected state with the vendor state |
+| HLD | High-level design: zones, flows, risks, rollout |
+| LLD | Low-level design: tables, APIs, retries, metrics |
 
-> **ELI5:** Encryption is locking a diary (key opens it). Tokenization is replacing your passport number with a coat-check ticket; the coat room (vault) holds the passport. The cafe only sees the ticket.
+> **ELI5:** Encryption locks a diary. Tokenization gives a coat-check ticket. The cafe sees only the ticket.
 
-If vendor cloud is breached and only has tokens + no vault access, attackers don’t get raw PII.
+**Do not say:** You built DPaaS.  
+**Do say:** You drove the integration design and the recon design.
 
-## Zero-trust (practical meaning)
+---
 
-Don’t assume “inside the bank network = safe.” Every hop should authenticate, authorize, and minimize sensitive data exposure. Vendor SaaS should never need plaintext PII if tokens suffice.
-
-## HLD vs LLD
-
-**HLD:** constraints, trust zones, component/sequence diagrams, non-functionals, risks, rollout phases.  
-**LLD:** table schemas + indexes, API contracts, state machine + retry policy, metrics, alerts, runbooks.
-
-> **On your resume:** You **drove** HLD/LLD for the tokenization path — you didn’t invent the bank’s DPaaS product itself.
-
-## Acronyms
-
-| Term | Say this |
-|------|----------|
-| **DPaaS** | Bank tokenization platform: sensitive in → token out; vault stays on-prem |
-| **DTU** | Approved encrypted pipeline on-prem → cloud with logging/checksums/audit |
-| **Recon** | Batch comparing expected vs actual tokenization state |
-
-## Data flow (draw this)
+## 3. How it works
 
 ```
- ON-PREM                         TRANSIT                 AWS / VENDOR
-┌────────────┐   ┌───────┐   ┌─────┐   ┌──────────────────────────┐
-│ Source data│──▶│ DPaaS │──▶│ DTU │──▶│ SaaS stores tokens only  │
-└────────────┘   └───────┘   └─────┘   └────────────▲─────────────┘
-      │                                             │
-      │              recon compares states ─────────┘
-      ▼
-┌────────────────────────────────────────┐
-│ Recon batch: MySQL state + Oracle dumps│
-│ match / mismatch → retry → alert       │
-└────────────────────────────────────────┘
+ON-PREM              TRANSIT         AWS / VENDOR
+Source data → DPaaS → DTU (encrypt) → SaaS stores tokens only
+     │                                    ▲
+     └──────── recon compares ────────────┘
 ```
 
-## State machine (account tokenization)
+Account states:
 
 ```
 PENDING → IN_TRANSIT → CONFIRMED
-   │           │
-   └────────▶ FAILED → (retry < N) → PENDING
-                     → (retry ≥ N) → MANUAL_REVIEW
+    │          │
+    └──────→ FAILED → retry (if attempts < N) → PENDING
+                   → MANUAL_REVIEW (if attempts ≥ N)
 ```
 
 ---
 
-# Proof — how you prove tokenization worked
+## 4. Proof (how you know it worked)
 
-Interviewers will ask: *“How do you know 100K+ accounts are actually tokenized — not just ‘job green’?”*
+**Rule:** A green batch job is not proof. Proof is vendor data that matches our expected population.
 
-**Proof ≠ “pipeline finished.”** Proof = measurable evidence that vendor-side state matches expected tokenized state for the population in scope.
+### Three proof layers
 
-## What “proof” means here
+| Layer | Question | Evidence |
+|-------|----------|----------|
+| Control plane | Did our system record the work? | Status counts in our control table |
+| Data plane | Does the vendor hold an active token? | Join to vendor snapshot |
+| Integrity | Is the population and date correct? | `business_date`, expected flags, counts |
 
-You need three layers of evidence:
+### Recon steps
 
-| Layer | Question it answers | Example |
-|-------|---------------------|---------|
-| **Control-plane proof** | Did *our* system record success correctly? | Status counts in `integration_account_status` |
-| **Data-plane proof** | Does *vendor* actually hold an active token? | Join/compare against vendor snapshot / export |
-| **Integrity proof** | Are we comparing the right population for the right day? | `business_date`, expected flags, row counts, checksums |
+1. Select the cohort for `business_date = D`.
+2. Keep rows where `expected_token = TRUE`.
+3. Left-join the vendor token snapshot on `account_id`.
+4. Classify each row: MATCH, MISSING, BAD_STATUS, or UNEXPECTED.
+5. Count mismatches.
+6. Permit cutover only if mismatches are at or below the agreed limit.
 
-> **ELI5:** Finishing a delivery route isn’t proof packages arrived. You need signatures (vendor tokens) matched to the delivery list (expected accounts).
-
-## Control tables you reason about
-
-Conceptual columns (names can be sanitized in interview):
-
-**`integration_account_status` (ours)**
-
-| Column | Role in proof |
-|--------|----------------|
-| `account_id` | Join key |
-| `expected_token` | In scope for tokenization? |
-| `tokenization_status` | PENDING / IN_TRANSIT / CONFIRMED / FAILED / MANUAL_REVIEW |
-| `token_ref` (optional) | Opaque reference we believe vendor should have |
-| `attempt_count` | Retry depth |
-| `last_error` | Why failed |
-| `business_date` | Which run/cohort |
-| `last_updated` | Freshness |
-
-**`vendor_token_snapshot` (theirs, landed via export/API pull)**
-
-| Column | Role in proof |
-|--------|----------------|
-| `account_id` | Join key |
-| `token_id` | Present or null |
-| `token_status` | ACTIVE / inactive |
-| `as_of` | Snapshot time |
-
-## Recon algorithm (say this out loud)
-
-1. Fix a **cohort**: `business_date = D` (or migration wave id).  
-2. Select expected population: `expected_token = TRUE`.  
-3. Left-join vendor snapshot on `account_id`.  
-4. Classify each row:
-   - **MATCH:** vendor has ACTIVE token (and optional token_ref matches if you store one)  
-   - **MISSING:** vendor token null  
-   - **BAD_STATUS:** token exists but not ACTIVE  
-   - **UNEXPECTED:** vendor has token but we didn’t expect (investigate)  
-5. Aggregate counts + sample mismatch IDs for ops.  
-6. Gate: cutover/wave success only if mismatch rate ≤ threshold (ideally 0 for critical waves).
-
-## Whiteboard SQL — mismatches
+### SQL — mismatches
 
 ```sql
--- Accounts that SHOULD be tokenized but are not confirmed on vendor side
-SELECT s.account_id,
-       s.tokenization_status AS our_status,
-       v.token_id,
-       v.token_status,
-       s.attempt_count,
-       s.last_error
+SELECT s.account_id, s.tokenization_status, v.token_id, v.token_status
 FROM   integration_account_status s
 LEFT JOIN vendor_token_snapshot v
        ON v.account_id = s.account_id
 WHERE  s.expected_token = TRUE
   AND  s.business_date = :runDate
-  AND  (
-         v.token_id IS NULL
-         OR v.token_status <> 'ACTIVE'
-       );
+  AND  (v.token_id IS NULL OR v.token_status <> 'ACTIVE');
 ```
 
-## Whiteboard SQL — proof dashboard
+### SQL — proof counts
 
 ```sql
--- Population health for a business date
 SELECT tokenization_status, COUNT(*) AS cnt
 FROM   integration_account_status
 WHERE  business_date = :runDate
   AND  expected_token = TRUE
-GROUP BY tokenization_status
-ORDER BY cnt DESC;
+GROUP BY tokenization_status;
 
--- Hard proof number interviewers want
-SELECT COUNT(*) AS confirmed_count
+SELECT COUNT(*) AS confirmed_with_vendor
 FROM   integration_account_status s
 JOIN   vendor_token_snapshot v ON v.account_id = s.account_id
 WHERE  s.business_date = :runDate
@@ -171,293 +103,213 @@ WHERE  s.business_date = :runDate
   AND  v.token_status = 'ACTIVE';
 ```
 
-## Checksums / counts (don’t skip this)
+### Count checks before you say "100K+"
 
-Before declaring “100K+ done”:
+1. Expected count for the wave.
+2. Sent count.
+3. Confirmed count with vendor ACTIVE token.
+4. Mismatch count with an owner for each open item.
 
-1. **Expected count** from source cohort (`COUNT(*)` where expected).  
-2. **Sent count** (IN_TRANSIT + CONFIRMED + FAILED attempts that left on-prem).  
-3. **Confirmed ∩ vendor ACTIVE** count.  
-4. **Mismatch count** must be explained (retrying vs MANUAL_REVIEW).  
-5. Optional: hash of sorted `account_id` list for wave vs vendor export to catch silent truncation.
+### Proof traps
 
-## What you say when asked “how measured 100K+?”
+- Do not say: "The job completed, so all accounts are tokenized."
+- Do not say: "The vendor received the file."
+- Do not use only a sample of 10 accounts as population proof.
 
-> “100K+ is the distinct account population in migration/tokenization scope. Proof is not TWS green — it’s recon: for business_date D, expected accounts left-joined to vendor token snapshot, requiring ACTIVE token. We tracked CONFIRMED vs MISSING/BAD_STATUS until mismatches were cleared or parked in MANUAL_REVIEW with owners.”
+### One sentence for the interviewer
 
-## Proof traps (never say)
-
-- “The batch job succeeded, so all accounts are tokenized.”  
-- “Vendor said the file landed.”  
-- “We checked a sample of 10 accounts.” (sample ≠ population proof; samples are for smoke only)
+> More than 100K is the account population in scope. Proof is a recon join that requires an ACTIVE vendor token for each expected account.
 
 ---
 
-# Recovery — fault-tolerant retries & failure handling
+## 5. Recovery (when work fails)
 
-Recovery answers: *What happens when tokenization/transfer/recon fails mid-flight for thousands of accounts?*
+**Rule:** A failure must not force a full restart of 100K accounts.
 
-## Failure classes
+### Failure types
 
-| Class | Examples | Strategy |
-|-------|----------|----------|
-| **Transient** | DPaaS timeout, DTU blip, vendor 5xx, network | Retry with backoff; keep idempotent |
-| **Deterministic / data** | Validation fail, unknown account mapping | Don’t blind-retry forever → FAILED / MANUAL_REVIEW |
-| **Poison / systemic** | Vendor outage, bad schema change | Circuit break; pause wave; alert |
-| **Partial wave** | Job dies after 40k of 100k | Resume from cursor; never restart whole population blindly |
+| Type | Examples | Action |
+|------|----------|--------|
+| Transient | Timeout, vendor 5xx, network blip | Retry with backoff |
+| Data error | Bad mapping, validation fail | Stop blind retries. Mark FAILED or MANUAL_REVIEW |
+| Systemic | Vendor outage, bad schema | Pause the wave. Alert owners |
+| Partial wave | Job stops at 40K of 100K | Resume from remaining PENDING or FAILED rows |
 
-## Idempotency (must say)
+### Idempotency
 
-Re-sending the same account must not create duplicate conflicting tokens or corrupt vault mappings.
+- Use a stable key: `account_id` + `wave_id`.
+- Do not mark CONFIRMED without vendor proof.
+- Do not flip CONFIRMED back to PENDING without a controlled action.
 
-- Use stable **idempotency key** = `account_id` + `wave_id` (or business key DPaaS understands).  
-- State transitions are monotonic where possible: don’t flip CONFIRMED → PENDING without explicit compensating action.  
-- Recon is read-mostly; repair actions go through controlled retry/replay path.
+### Retry policy (example you can defend)
 
-## Retry policy (LLD-level answer)
+| Attempt | Wait | Result if fail again |
+|---------|------|----------------------|
+| 1 | Short | Retry |
+| 2 | About 1 to 5 minutes | Retry |
+| 3 | About 15 minutes | Retry |
+| Max | — | MANUAL_REVIEW and alert |
 
-Example policy you can defend:
+Store `attempt_count`, `last_error` (no raw PII), and timestamps on each attempt.
 
-| Attempt | Delay | Action |
-|---------|-------|--------|
-| 1 | immediate / short | Retry transient |
-| 2 | ~1–5 min | Retry |
-| 3 | ~15 min | Retry |
-| ≥ N (e.g. 3–5) | — | `MANUAL_REVIEW` + page owner |
+### Chunked resume
 
-Persist on every attempt:
+1. Select the next chunk of PENDING or FAILED rows with `attempt_count < N`.
+2. Process the chunk.
+3. Commit state per account or per small batch.
+4. If the job stops, the next run continues from the remaining rows.
 
-- `attempt_count++`  
-- `last_error` (truncated, safe — no raw PII in logs)  
-- timestamps  
+### Ops playbooks
 
-## Resume / checkpointing
+**A. One account stuck in IN_TRANSIT**
 
-Backfill 100K+ in **chunks** (e.g. 500–2000 accounts):
+1. Find the correlation id in DTU or vendor logs.
+2. Pull a fresh vendor snapshot for that account.
+3. If vendor status is ACTIVE, mark CONFIRMED.
+4. If the token is missing, requeue PENDING with a new attempt.
+5. If the state is unclear, use MANUAL_REVIEW. Do not guess SUCCESS.
 
-1. Select next chunk: `status IN ('PENDING','FAILED') AND attempt_count < N ORDER BY account_id LIMIT :batch`.  
-2. Process chunk.  
-3. Commit per-account state (or small batches in a transaction).  
-4. If job crashes, next run continues from remaining PENDING/FAILED — **not** from account #1 of the whole population.
+**B. Mismatch count rises overnight**
 
-> **Interview tip:** “Resumable” is the difference between a professional migration and a weekend fire drill.
+1. Freeze new cutover gates.
+2. Split mismatches into MISSING, BAD_STATUS, and our FAILED.
+3. If the vendor is down, pause retries and keep the backlog.
+4. If mapping is wrong, stop automatic retries. Fix the mapping. Then replay.
+5. Publish mismatch count and ETA.
 
-## Recovery playbooks (ops-facing)
+**C. Possible wrong token**
 
-### A) Single account stuck IN_TRANSIT
+1. Treat it as a data incident.
+2. Compare on-prem vault mapping with the vendor token.
+3. Use only the approved runbook for a fix. Include security.
 
-1. Check DTU/vendor ack logs for correlation id.  
-2. Pull fresh vendor snapshot for that account.  
-3. If vendor ACTIVE → mark CONFIRMED (recon heal).  
-4. If missing → requeue PENDING with new attempt (idempotent send).  
-5. If ambiguous → MANUAL_REVIEW (do not guess SUCCESS).
+### Recovery in one sentence
 
-### B) Wave mismatch spike overnight
-
-1. Freeze new cutover gates.  
-2. Classify mismatches (MISSING vs BAD_STATUS vs our FAILED).  
-3. If vendor outage → pause retries; keep backlog.  
-4. If bad mapping → stop automatic retries; fix mapping; controlled replay.  
-5. Publish mismatch count + ETA to stakeholders.
-
-### C) Suspected duplicate / wrong token
-
-1. Treat as data incident — not silent overwrite.  
-2. Compare vault mapping (on-prem) vs vendor token.  
-3. Compensating action only via approved runbook (security involved).
-
-## Recovery SQL helpers
-
-```sql
--- Retry candidates
-SELECT account_id, attempt_count, last_error, last_updated
-FROM   integration_account_status
-WHERE  business_date = :runDate
-  AND  expected_token = TRUE
-  AND  tokenization_status IN ('FAILED', 'PENDING')
-  AND  attempt_count < :maxAttempts
-ORDER BY last_updated
-FETCH FIRST 1000 ROWS ONLY;  -- or LIMIT on MySQL
-
--- Escalations
-SELECT account_id, attempt_count, last_error
-FROM   integration_account_status
-WHERE  business_date = :runDate
-  AND  tokenization_status = 'MANUAL_REVIEW';
-```
-
-## What “fault-tolerant retries” means in one sentence
-
-> Transient errors requeue with backoff and a hard attempt cap; progress is checkpointed per account; poison/systemic failures pause the wave; nothing is marked CONFIRMED without vendor-side proof.
+> Transient errors retry with a hard cap. Progress is checkpointed per account. Systemic failures pause the wave. CONFIRMED needs vendor proof.
 
 ---
 
-# Cutover — zero-downtime steps in detail
+## 6. Cutover (zero downtime steps)
 
-Cutover answers: *How do you switch reality to the tokenized path without an outage?*
+**Rule:** Do not do a big-bang cut. Flip authority in phases. Keep a routing rollback.
 
-**Zero downtime** here means customers/ops keep processing; you do **not** take a big-bang weekend cut where plaintext and tokens thrash inconsistently.
+### Phase 0 — Ready
 
-## Principles
+- Architecture and security approve HLD and LLD.
+- Non-prod tests pass for DPaaS, DTU, and recon.
+- Dashboards and alerts exist.
+- Rollback owner and steps are written.
 
-1. **Dual-running / parallel validation** before authority flips.  
-2. **Wave-based** population (not all 100K in one irreversible switch).  
-3. **Routing flag** decides which path is authoritative.  
-4. **Rollback is a config/TWS change**, not a hero restore from backup as plan A.  
-5. **Proof gates** block the flip if recon is red.
+### Phase 1 — Parallel run
 
-## Phases (memorize this sequence)
+- New path runs for a wave.
+- Legacy path stays authoritative.
+- Recon runs each day.
+- Exit when recon stays stable for the agreed number of business days.
 
-### Phase 0 — Design & readiness
+### Phase 2 — Backfill
 
-- HLD/LLD signed by architecture + security  
-- Trust zones agreed: plaintext never lands in vendor SaaS  
-- DPaaS + DTU contracts tested in non-prod  
-- Recon job + dashboards + alerts built  
-- Rollback plan written (who flips what, RTO target)  
-- Success metrics: mismatch%=0 (or agreed threshold), latency SLOs, error budgets  
+- Process remaining accounts in chunks.
+- Burn down MANUAL_REVIEW with named owners.
+- Exit when CONFIRMED with vendor ACTIVE meets the agreed coverage.
 
-### Phase 1 — Shadow / parallel run
+### Phase 3 — Soft cutover
 
-- **New path live for writes in shadow or dual-write-safe mode** where possible  
-- Legacy path still authoritative for business outcomes  
-- Tokenization + DTU run for wave 1 accounts  
-- Recon runs daily; mismatches triaged  
-- No customer-facing cut yet  
+- Flip a routing flag for a small cohort.
+- Watch errors, recon drift, and ops tickets.
+- Exit when the cohort stays healthy for a full business cycle.
 
-**Exit criteria:** recon stable on wave 1 for N consecutive business days (agree N, e.g. 2–5).
+### Phase 4 — Hard cutover
 
-### Phase 2 — Backfill historical population
-
-- Chunked backfill of remaining accounts to CONFIRMED  
-- Resume-safe jobs under TWS  
-- Progress dashboard: PENDING / IN_TRANSIT / CONFIRMED / FAILED / MANUAL_REVIEW  
-- MANUAL_REVIEW burn-down owned by ops + eng  
-
-**Exit criteria:** CONFIRMED ∩ vendor ACTIVE covers agreed % of scope (target ~100% for accounts that must be on vendor).
-
-### Phase 3 — Soft cutover (read/write authority begins flipping)
-
-- Feature flag / routing table: subset of traffic or account ranges use vendor tokenized path as source of truth  
-- Start with low-risk cohort  
-- Watch: error rates, recon drift, ops tickets, vendor latency  
-
-**Exit criteria:** cohort healthy for full business cycle (include month-end if that’s your stress day).
-
-### Phase 4 — Hard cutover (legacy de-authoritative)
-
-- Flip remaining routing to tokenized SaaS path  
-- Legacy path read-only or disabled for those workflows  
-- Keep emergency rollback window (flag + TWS old job defs retained)  
-
-**Exit criteria:** proof dashboard green; rollback unused; security sign-off recorded.
+- Flip remaining traffic to the tokenized path.
+- Keep emergency rollback for a soak window.
+- Exit when proof stays green and security signs off.
 
 ### Phase 5 — Decommission
 
-- Remove dual-run cost only after soak period  
-- Archive recon reports for audit  
-- Update runbooks: replay/retry now assume tokenized world  
+- Remove dual-run cost after the soak period.
+- Archive recon reports for audit.
+- Update runbooks for the tokenized world.
 
-## Cutover checklist (print-level)
+### Before the flip
 
-**Before flip**
+- Mismatch count is at the limit (or waived with owners).
+- DPaaS, DTU, and vendor health are green.
+- Rollback owner is on call.
+- Ops and product received the notice.
 
-- [ ] Mismatch count = 0 (or waived with named owners)  
-- [ ] MANUAL_REVIEW count acceptable  
-- [ ] Vendor + DTU + DPaaS health green  
-- [ ] Rollback owner on-call named  
-- [ ] Comms to ops/product sent  
+### During the flip
 
-**During flip**
+- Change ticket is open if the bank requires it.
+- Toggle the routing flag.
+- Smoke-test canary accounts.
+- Watch recon and error dashboards.
 
-- [ ] Change ticket / CAB as required  
-- [ ] Toggle routing flag  
-- [ ] Smoke: create/read path on canary accounts  
-- [ ] Watch recon + error dashboards live  
-
-**After flip (first business cycle)**
-
-- [ ] EOD recon green  
-- [ ] No spike in FAILED steps / ops pages  
-- [ ] Confirm no plaintext fields in vendor payloads (spot audit)  
-
-## Rollback (must be crisp)
+### Rollback
 
 | Trigger | Action |
 |---------|--------|
-| Recon mismatch spike | Pause new waves; investigate before more flips |
-| Vendor outage | Fail closed on new tokenized-dependent writes or degrade per runbook |
-| Data integrity doubt | Flip routing flag back to legacy authoritative path |
-| Security finding | Stop DTU sends; incident process |
+| Recon mismatch spike | Pause new waves. Investigate |
+| Vendor outage | Follow the fail-closed or degrade runbook |
+| Data integrity doubt | Flip routing back to legacy authority |
+| Security finding | Stop DTU sends. Start the incident process |
 
-Rollback is **routing + scheduler**, not “restore yesterday’s DB and hope.”
+### Zero downtime in one sentence
 
-## How to say “zero downtime” safely
-
-> “Zero downtime meant phased cutover: new accounts and waves moved to the tokenized path while legacy remained available until recon proved population health for a full business cycle. Rollback was a routing/TWS revert, not an outage window.”
+> New waves move to the tokenized path while legacy stays available. We flip routing only after recon proof. Rollback is a routing and TWS change.
 
 ---
 
-## Spoken scripts (rehearse out loud)
+## 7. Say this (2 minutes)
 
-### 30 seconds
-
-> Vendor cloud can’t store raw PII. We tokenize on-prem with DPaaS, move encrypted payloads through DTU, and prove success with SQL recon against vendor snapshots for 100K+ accounts — with checkpointed retries and a phased cutover so we didn’t need a downtime window.
-
-### 2 minutes (design interview)
-
-> Constraint: third-party SaaS on AWS must not hold plaintext PII.  
-> I split trust zones — on-prem, transit, vendor. On-prem, DPaaS replaces sensitive fields with tokens; vault stays with us. DTU ships encrypted payloads only.  
-> LLD: per-account state machine PENDING → IN_TRANSIT → CONFIRMED / FAILED, attempt counters, and a recon job that left-joins our control table to a vendor token snapshot. CONFIRMED is only set when vendor shows ACTIVE token — job success alone is not proof.  
-> Recovery: chunked backfill, idempotent retries with backoff, MANUAL_REVIEW after max attempts, pause on systemic outage.  
-> Cutover: shadow/parallel → backfill → soft flag flip by cohort → hard cutover → soak → decommission, with routing rollback as plan A.  
-> That’s how we reached 100K+ confirmed without a big-bang outage.
+> Constraint: the vendor SaaS on AWS must not hold plaintext PII.  
+> I split trust zones into on-prem, transit, and vendor. DPaaS creates tokens on-prem. The vault stays with us. DTU sends encrypted payloads only.  
+> Each account has a state: PENDING, IN_TRANSIT, CONFIRMED, FAILED, or MANUAL_REVIEW.  
+> Proof is not a green job. Proof is a recon join to a vendor snapshot that requires an ACTIVE token.  
+> Recovery uses chunked backfill, idempotent retries with backoff, and MANUAL_REVIEW after the max attempts.  
+> Cutover uses parallel run, backfill, soft flag flip, hard cutover, then soak. Rollback flips routing back.  
+> That is how we confirmed more than 100K accounts without a downtime window.
 
 ---
 
-## Blind checklist (mark done only if all pass)
-
-- [ ] Draw trust zones + recon loop from memory  
-- [ ] Write mismatch SQL without looking  
-- [ ] Explain proof vs “job green” in 3 sentences  
-- [ ] Walk Phase 0→5 cutover + one rollback trigger  
-- [ ] Speak 2-minute script once without notes  
-
-## Interview Q&A
+## 8. Top questions
 
 <details>
-<summary>Why not just encrypt fields in vendor DB?</summary>
+<summary>Why not only encrypt fields in the vendor DB?</summary>
 
-Encryption still means ciphertext lives in vendor scope; key management becomes shared risk; tokenization can remove raw values from vendor entirely. Banks often prefer tokens for third-party systems.
+Encryption still stores ciphertext in the vendor scope. Tokenization can keep the raw value out of the vendor system.
 
 </details>
 
 <details>
-<summary>What is fault-tolerant retry?</summary>
+<summary>What does fault-tolerant retry mean?</summary>
 
-Transient errors requeue with backoff and a hard cap; progress checkpointed per account; systemic failures pause the wave; CONFIRMED only after vendor-side proof.
-
-</details>
-
-<details>
-<summary>How do you prove “100K+ confirmed”?</summary>
-
-Population count for the wave + recon join requiring vendor ACTIVE tokens + mismatch burn-down to threshold. Not TWS success alone.
+Retry transient errors with backoff and a max attempt count. Checkpoint per account. Pause on systemic failure. Mark CONFIRMED only after vendor proof.
 
 </details>
 
 <details>
-<summary>What if recon and control table disagree?</summary>
+<summary>How do you prove more than 100K confirmed?</summary>
 
-Trust vendor snapshot for “exists at vendor,” investigate control-plane bugs, never silently force SUCCESS. Park ambiguous rows in MANUAL_REVIEW.
+Count the expected population. Join to the vendor snapshot. Require ACTIVE tokens. Burn down mismatches. Do not use job success alone.
 
 </details>
 
 <details>
-<summary>How big were chunks and why?</summary>
+<summary>What if recon and our table disagree?</summary>
 
-Hundreds to low thousands per batch — balances throughput vs blast radius and transaction size; tune on vendor rate limits and job window.
+Trust the vendor snapshot for "exists at vendor". Investigate control bugs. Park unclear rows in MANUAL_REVIEW. Do not force SUCCESS.
 
 </details>
 
-Next: [Async & throughput](#/05-async-throughput)
+---
+
+## 9. Blind check
+
+- [ ] Draw the three zones and the recon loop.
+- [ ] Write the mismatch SQL from memory.
+- [ ] Explain proof in three short sentences.
+- [ ] List cutover phases 0 to 5 and one rollback trigger.
+- [ ] Speak the 2-minute answer with no notes.
+
+Next: [Async and throughput](#/05-async-throughput)
