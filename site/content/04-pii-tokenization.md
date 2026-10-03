@@ -4,59 +4,82 @@
 
 > Drove system design (**HLD/LLD**) so vendor SaaS stores **tokenized PII**, not plaintext: on-prem data tokenized via **DPaaS**, encrypted in transit through **DTU** to AWS; batch recon confirms **100K+** accounts with fault-tolerant retries and **zero downtime**.
 
-This is often your **best system-design story**.
+This is often your **best system-design story**. Make it vivid.
 
-## Teach first: What is PII?
+---
 
-**PII = Personally Identifiable Information** — data that can identify a person (name, national ID, account numbers tied to a person, etc.).
+## The whole story (read until it’s natural)
 
-Banks treat PII as high-risk because of regulation, fraud, and reputational damage.
+When we moved workflows to a **vendor SaaS on AWS**, security and compliance drew a hard line: **the vendor cloud must not store plaintext PII**. Names, account identifiers tied to people, and similar fields cannot simply be copied into a third-party database “because the API accepts them.”
 
-## Encryption vs hashing vs tokenization
+So the design question became:
 
-| Technique | What it does | Reversible? | Typical use |
-|-----------|--------------|-------------|-------------|
-| Encryption | Scrambles with a key | Yes, with key | Protect data in transit/at rest |
-| Hashing | One-way digest | No (in practice) | Passwords, checksums |
-| Tokenization | Replace sensitive value with random token; real value in vault | Only via vault mapping | Card/account identifiers in downstream systems |
+> How do we give the SaaS enough identity to operate, without giving it the real sensitive values — and how do we **prove** we did that correctly for **100K+ accounts**, without taking production down?
 
-> **ELI5:** Encryption is locking a diary (key opens it). Tokenization is replacing your passport number with a coat-check ticket; the coat room (vault) holds the passport. The cafe only sees the ticket.
+I drove the **HLD and LLD** for that tokenization path (I did **not** build the bank’s DPaaS product itself — I designed how *our* migration uses it).
 
-If vendor cloud is breached and only has tokens + no vault access, attackers don’t get raw PII.
+**High level:**
 
-## Zero-trust (practical meaning)
+1. **On-prem:** source data hits **DPaaS** (Data Protection / tokenization platform). Sensitive fields become tokens; the vault that maps token ↔ real value stays bank-side.  
+2. **Transit:** payloads move through **DTU** (Data Transfer Utility) — approved encrypted transfer with logging/checksums/audit.  
+3. **Vendor AWS:** SaaS stores **tokens + non-sensitive attributes only**.  
+4. **Proof:** a **recon batch** compares our expected tokenization state (MySQL) against vendor-side snapshots/exports (often involving Oracle reporting paths) and flags mismatches.  
+5. **Recovery:** mismatches enter a retry queue with backoff; after N failures → manual review.  
+6. **Cutover:** phased — new writes on tokenized path; historical backfill in resumable batches; legacy path available until recon is green for a business cycle. Rollback = routing back.
 
-Don’t assume “inside the bank network = safe.” Every hop should authenticate, authorize, and minimize sensitive data exposure.
+That’s what “zero downtime” means here: not magic, but **phased cutover + resumable backfill + rollback plan**.
 
-Applied here: vendor SaaS should never need plaintext PII if tokens suffice.
+---
 
-## HLD vs LLD
+## 30-second pitch
 
-**HLD (High Level Design)**
+> Vendor SaaS couldn’t store raw PII. I drove HLD/LLD so we tokenize on-prem with DPaaS, transfer encrypted via DTU, and only land tokens in AWS. A SQL recon job proves 100K+ accounts are correctly tokenized, with retries and a phased cutover so we didn’t take production down.
 
-- Problem, constraints, trust zones
-- Component diagram & sequence flows
-- Non-functionals (availability, audit, RPO/RTO ideas)
-- Risks & rollout phases
+---
 
-**LLD (Low Level Design)**
+## 2-minute interview script
 
-- Table schemas + indexes
-- API contracts
-- State machine + retry policy
-- Metrics, alerts, runbooks
+> “The hardest design constraint in our SaaS migration was PII. Bank policy said the vendor cloud cannot hold plaintext identifiers.  
+>  
+> I documented trust zones: on-prem, transit, and vendor. On-prem, we send sensitive fields through DPaaS — the bank tokenization platform — which returns tokens. The real values stay in the vault we control. Then DTU moves encrypted payloads to AWS. The SaaS only ever persists tokens plus non-sensitive business fields.  
+>  
+> At low level I modeled account tokenization state — PENDING, IN_TRANSIT, CONFIRMED, FAILED, MANUAL_REVIEW — and wrote the recon approach: compare integration tables in MySQL with vendor snapshots, find missing or inactive tokens, retry with backoff, page ops after repeated failure. We processed on the order of 100K+ accounts in batches so jobs were resumable.  
+>  
+> Zero downtime meant phased rollout: new accounts on the new path while we backfilled history and kept a rollback route until recon stayed clean across a full business cycle. I took that HLD through architecture/security review and owned the LLD details — schemas, retry policy, metrics, runbook.”
 
-> **On your resume:** You **drove** HLD/LLD for the tokenization path — you didn’t invent the bank’s DPaaS product itself.
+---
 
-## Acronyms on your resume
+## Teach the concepts
 
-| Term | Say this |
-|------|----------|
-| **DPaaS** | Bank Data Protection / tokenization platform: sensitive in → token out; vault stays on-prem |
-| **DTU** | Data Transfer Utility: approved encrypted pipeline on-prem → cloud with logging/checksums/audit |
-| **Recon** | Batch job comparing expected vs actual tokenization state |
+### PII
+Personally Identifiable Information — data that can identify a person. High regulatory and fraud risk in banks.
 
-## Data flow (draw this)
+### Encryption vs hashing vs tokenization
+
+| Technique | Idea | Reversible? | Use |
+|-----------|------|-------------|-----|
+| Encryption | Scramble with a key | Yes with key | Transit / at-rest protection |
+| Hashing | One-way digest | No (practically) | Passwords, checksums |
+| Tokenization | Replace value with random token; vault keeps mapping | Only via vault | Third-party systems that shouldn’t hold raw PII |
+
+> **ELI5:** Encryption locks the diary. Tokenization gives the cafe a coat-check ticket while the coat room keeps your passport.
+
+### HLD vs LLD
+
+- **HLD:** constraints, trust zones, components, sequence, risks, rollout  
+- **LLD:** tables/indexes, API contracts, state machine, retry numbers, alerts, runbook  
+
+### DPaaS / DTU (say in two sentences each)
+
+- **DPaaS:** bank tokenization service — sensitive in, token out; vault on-prem.  
+- **DTU:** approved pipeline to move encrypted data on-prem → cloud with audit trail.
+
+### Zero-trust (practical)
+Don’t assume “inside bank network = safe.” Minimize sensitive data at every hop; authenticate/authorize every call.
+
+---
+
+## Architecture (draw this)
 
 ```
  ON-PREM                         TRANSIT                 AWS / VENDOR
@@ -72,7 +95,7 @@ Applied here: vendor SaaS should never need plaintext PII if tokens suffice.
 └────────────────────────────────────────┘
 ```
 
-## State machine (account tokenization)
+### State machine
 
 ```
 PENDING → IN_TRANSIT → CONFIRMED
@@ -81,7 +104,7 @@ PENDING → IN_TRANSIT → CONFIRMED
                      → (retry ≥ N) → MANUAL_REVIEW
 ```
 
-## Sample recon SQL (whiteboard)
+### Whiteboard SQL
 
 ```sql
 SELECT s.account_id, s.tokenization_status, s.last_updated
@@ -93,47 +116,86 @@ WHERE  s.expected_token = TRUE
   AND  (v.token_id IS NULL OR v.token_status <> 'ACTIVE');
 ```
 
-## Zero downtime meaning
+Count dashboard:
 
-- New writes go through tokenized path
-- Historical backfill in batches with resume cursor
-- Legacy path may stay available until recon is green for a full business cycle
-- Rollback = routing flag / TWS defs back to previous path
+```sql
+SELECT tokenization_status, COUNT(*)
+FROM integration_account_status
+WHERE business_date = :runDate
+GROUP BY tokenization_status;
+```
 
-## 30-second pitch
+---
 
-> Vendor cloud can’t store raw PII. We tokenize on-prem with DPaaS, move encrypted payloads through DTU, and run SQL recon proving 100K+ accounts are correctly tokenized — with retries and no production outage.
+## What “drove HLD/LLD” means in practice
 
-## 2-minute design answer skeleton
+You can claim:
 
-1. Constraint: no plaintext in vendor SaaS  
-2. Trust zones: on-prem / transit / vendor  
-3. DPaaS tokenize → DTU encrypt transfer  
-4. Schema + states for each account  
-5. Recon + retry queue + paging  
-6. Phased cutover + rollback  
+- Wrote/presented design docs  
+- Defined trust boundaries and data flow  
+- Specified schemas, states, recon algorithm, retry policy  
+- Reviewed with security/architecture  
+- Defined success metrics (recon mismatch ≈ 0)
 
-## Interview Q&A
+You should **not** claim:
+
+- “I built DPaaS”  
+- “I alone approved bank-wide crypto policy”
+
+---
+
+## Deep interview Q&A
 
 <details>
-<summary>Why not just encrypt fields in vendor DB?</summary>
+<summary>Why not just encrypt fields in the vendor DB?</summary>
 
-Encryption still means ciphertext lives in vendor scope; key management becomes shared risk; tokenization can remove raw values from vendor entirely. Banks often prefer tokens for third-party systems.
+Encryption still places ciphertext in vendor scope and creates shared key-management risk. Tokenization can remove raw values from the vendor entirely. For third-party SaaS, tokens are often the cleaner compliance story.
 
 </details>
 
 <details>
-<summary>What is fault-tolerant retry?</summary>
+<summary>How do fault-tolerant retries work?</summary>
 
-Transient failures requeue with backoff and max attempts; permanent failures go to manual review; jobs are resumable (don’t restart 100K from zero); every attempt audited.
+Transient failures requeue with exponential backoff and a max attempt count. Jobs are resumable (cursor/status column) so a crash doesn’t restart 100K from zero. Permanent failures go to MANUAL_REVIEW. Every attempt is audited.
 
 </details>
 
 <details>
-<summary>How do you prove “100K+ confirmed”?</summary>
+<summary>How did you achieve zero downtime?</summary>
 
-Dashboard query grouping by status for business_date; mismatch count = 0 (or below threshold) before declaring cutover success.
+Phased cutover + dual-run validation + resumable backfill batches + rollback routing. New writes tokenized immediately; history backfilled; no single night “flip everything or die.”
 
 </details>
 
-Next: [Async & throughput](#/05-async-throughput)
+<details>
+<summary>What indexes / data structures mattered?</summary>
+
+Indexed `account_id` and `(business_date, status)` for recon/dashboard queries. In-memory maps for batch windows. Queue of failed account IDs for retry workers. Explicit state enum rather than boolean flags.
+
+</details>
+
+<details>
+<summary>What risks did you call out in HLD?</summary>
+
+Partial migration, vault/DPaaS outage, DTU transfer failure, recon false positives, vendor schema drift, dual-write inconsistency during parallel run. Mitigations: retries, circuit breaking, checksums, phased rollout, clear rollback.
+
+</details>
+
+<details>
+<summary>How do you know you’re done?</summary>
+
+For a business date: expected accounts CONFIRMED, mismatch count at/under threshold, no critical FAILED backlog, stakeholders sign off, then make SaaS path authoritative.
+
+</details>
+
+---
+
+## Practice checklist
+
+- [ ] Tell the story with trust zones in under 2 minutes  
+- [ ] Draw DPaaS → DTU → vendor + recon loop  
+- [ ] Write recon SQL from memory  
+- [ ] Explain HLD vs LLD with what *you* wrote  
+- [ ] Define zero downtime without hand-waving  
+
+**Next:** [Async & throughput](#/05-async-throughput)

@@ -4,38 +4,68 @@
 
 > Refactored **Core Java** into a **Maven** multi-module **Spring Framework / Spring Boot** service with **Spring Data JPA**, applying OOP, SOLID, and design patterns; **JUnit/Mockito** unit testing, integration testing, and code reviews.
 
-## Teach first: Core Java vs Spring Boot service
+---
 
-**Core Java app** (typical legacy shape):
+## The whole story
 
-- `main` methods, manual wiring
-- Inconsistent config
-- Harder to test
-- Custom HTTP handling or ad-hoc clients
-- SQL scattered as strings
+Parts of the integration stack started as **Core Java**: workable, but wiring was manual, structure was inconsistent, and testing was painful. As the SaaS migration grew — more vendor endpoints, more step states, more environments — that shape became a liability.
 
-**Spring Boot service:**
+I refactored the service into a **Maven multi-module Spring Boot** application:
 
-- Clear layers (controller/service/repo)
-- Dependency injection
-- Profiles, actuators, standardized packaging
-- Test slices and mocks
+- Clear layers: controller (HTTP) → service (business rules) → repository (JPA/SQL)  
+- **Dependency injection** so components are swappable and testable  
+- **Spring Data JPA** for durable step/account state  
+- **JUnit + Mockito** for unit tests (especially failure paths)  
+- Shared standards via **code reviews**  
+- Design guided by **OOP / SOLID** and a few practical patterns (not buzzword bingo)
 
-> **ELI5:** Refactoring into Spring Boot is reorganizing a messy toolbox into labeled drawers so the next engineer (and future you) can find the hammer without injury.
+This wasn’t a rewrite for fashion. It made the async workers, replay APIs, Kafka publishers, and Jenkins packaging safer to change without breaking payment flows.
 
-## Maven multi-module
+---
 
-**Maven** builds Java projects. Multi-module means one repo/parent with modules such as:
+## 30-second pitch
 
-- `integration-api` (HTTP layer)
-- `integration-core` (business logic)
-- `integration-persistence` (JPA entities/repos)
+> I refactored legacy Core Java into a Maven multi-module Spring Boot service with Spring Data JPA, clear layering, and JUnit/Mockito coverage. That made failure handling and new features testable — critical while we were changing batch behavior under production load.
 
-Benefits: clearer boundaries, reuse, faster incremental builds, cleaner dependency direction.
+---
 
-## Dependency Injection (DI)
+## 2-minute interview script
 
-Instead of `new VendorClient()` everywhere, Spring injects dependencies:
+> “As the integration platform grew, our older Core Java shape was hard to test and hard to evolve. I led a refactor into Spring Boot with Maven modules — separating API, core business logic, and persistence.  
+>  
+> Controllers stay thin. Services own business rules like ‘timeout means FAILED’ and vendor mapping. Repositories persist step execution state through Spring Data JPA. Dependencies are injected, so in tests I can mock the vendor client and assert state transitions without hitting the real SaaS.  
+>  
+> We applied SOLID in practical ways — for example, vendor communication behind an interface, step lifecycle in one place, and retry policy as a strategy we can tune. Code review was part of the definition of done, especially around transactions and error handling.  
+>  
+> The payoff showed up in later work: async workers, replay APIs, and CI packaging were much easier because the seams were clean.”
+
+---
+
+## Teach the concepts (with your examples)
+
+### Core Java vs Spring Boot
+
+| Core Java pain | Spring Boot help |
+|----------------|------------------|
+| Manual `new` wiring | DI / constructors |
+| Ad-hoc config | Profiles (dev/test/prod) |
+| Hard HTTP/health | Embedded server + actuator |
+| SQL scattered | JPA repositories + clearer transactions |
+| Weak tests | Mockito + Spring test slices |
+
+> **ELI5:** From a junk drawer of tools to labeled drawers — same tools, findable and safer.
+
+### Maven multi-module
+
+Example split:
+
+- `integration-api` — REST controllers  
+- `integration-core` — services, vendor client interfaces  
+- `integration-persistence` — entities/repos  
+
+Benefits: dependency direction, reuse, faster incremental builds, clearer ownership.
+
+### DI example
 
 ```java
 @Service
@@ -50,11 +80,7 @@ public class PaymentSyncService {
 }
 ```
 
-Why interviewers care: testability (mock VendorClient), swappable implementations, less hidden coupling.
-
-## Spring Data JPA
-
-**JPA** maps classes to tables. **Spring Data JPA** gives repository interfaces:
+### Spring Data JPA
 
 ```java
 public interface StepRepository extends JpaRepository<BatchStepExecution, Long> {
@@ -62,61 +88,88 @@ public interface StepRepository extends JpaRepository<BatchStepExecution, Long> 
 }
 ```
 
-You still must understand SQL — frameworks don’t replace indexing/recon thinking.
+Still know SQL — frameworks don’t replace recon thinking.
 
-## OOP / SOLID (practical, not textbook dump)
+### SOLID mapped to your service
 
-Talk through **your** service:
+| Principle | Your example |
+|-----------|--------------|
+| SRP | `VendorClient` ≠ `ReconService` ≠ `ReplayController` |
+| DIP | Depend on `VendorClient` interface |
+| OCP | New error mapper without rewriting core loop |
+| Encapsulation | State transitions only via service methods |
+| Patterns | Strategy (retry), State (step lifecycle), Adapter (vendor API) |
 
-| Idea | Example in your system |
-|------|------------------------|
-| Encapsulation | Step state transitions behind a service method |
-| Single Responsibility | VendorClient ≠ ReconService ≠ ReplayController |
-| Open/Closed | New vendor error mapper without rewriting core loop |
-| Dependency Inversion | Depend on `VendorClient` interface, not a concrete SDK class |
-| Patterns | Strategy for retry policy; State for step lifecycle; Adapter for vendor API |
-
-## Testing
-
-- **Unit tests:** service logic with Mockito mocks  
-- **Integration tests:** DB + HTTP slices where valuable  
-- **Code reviews:** catch missing failure handling, bad transactions, secret leaks  
-
-Example mindset:
+### Testing story they want
 
 ```java
 @Test
 void marksFailedOnTimeout() {
   when(vendorClient.update(any())).thenThrow(new SocketTimeoutException());
-  // assert status == FAILED, not SUCCESS
+  // act
+  // assert status == FAILED (not SUCCESS)
 }
 ```
 
-## 30-second pitch
+Also mention integration tests for DB state and code review focus areas: transactions, secrets, idempotency.
 
-> I refactored legacy Core Java into a Maven multi-module Spring Boot service with JPA, clear layering, SOLID-minded design, and JUnit/Mockito coverage — making the integration code testable and safer to change.
+---
 
-## Interview Q&A
+## MVC request path (say aloud)
+
+1. `@RestController` receives `POST /batch/...`  
+2. Validates DTO  
+3. Service applies rules, calls vendor, updates state  
+4. Repository persists  
+5. Exception handler returns JSON errors; logs carry correlation id  
+
+---
+
+## Deep interview Q&A
 
 <details>
 <summary>@RestController vs @Controller?</summary>
 
-`@RestController` = `@Controller` + `@ResponseBody` — return values serialize to JSON directly.
+`@RestController` = `@Controller` + `@ResponseBody` — return values become JSON directly.
 
 </details>
 
 <details>
 <summary>What does @Transactional do?</summary>
 
-Wraps a method in a DB transaction. Default rollback on unchecked exceptions. Critical when writing business row + outbox/step updates together.
+Wraps work in a DB transaction. Default rollback on unchecked exceptions. Critical when writing step state (+ outbox) together so you don’t commit half a story.
 
 </details>
 
 <details>
-<summary>Why fat JAR later (bullet 7)?</summary>
+<summary>Why not stay on Core Java?</summary>
 
-Spring Boot packs app + dependencies into one runnable artifact for consistent deploys across envs.
+Velocity and safety. Migration features needed testable failure paths and consistent config across envs. Spring Boot paid for itself in fewer production surprises.
 
 </details>
 
-Next: [Kafka events](#/07-kafka)
+<details>
+<summary>How do you avoid an anemic domain / god service?</summary>
+
+Keep controllers thin; split services by capability (sync vs recon vs replay); don’t put HTTP concerns in repositories; review PRs for “this class does everything.”
+
+</details>
+
+<details>
+<summary>Connection pooling?</summary>
+
+HikariCP (Spring Boot default) reuses DB connections. Size pools to workers × usage; don’t open a connection per thread carelessly.
+
+</details>
+
+---
+
+## Practice checklist
+
+- [ ] Explain why refactor happened (pain → payoff)  
+- [ ] Walk MVC for one endpoint  
+- [ ] Give one Mockito failure-path test story  
+- [ ] Map two SOLID points to real classes  
+- [ ] Mention reviews as quality gate  
+
+**Next:** [Kafka events](#/07-kafka)

@@ -41,6 +41,13 @@ Each lesson roughly follows:
 3. **On your resume** (exact story + numbers)
 4. **Interview Q&A** (what they’ll ask + what to say)
 
+**Barclays deep dives** are written as full interview stories:
+
+1. **The whole story** — read until you can tell it without notes  
+2. **30-second pitch** + **2-minute script** — speak aloud  
+3. Concepts + architecture + numbers  
+4. Deep Q&A + practice checklist  
+
 Use **Mark done** in the top bar when you’ve practiced that lesson out loud once.
 
 ## Your resume at a glance (memorize)
