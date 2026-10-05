@@ -1,80 +1,69 @@
 # Async and throughput
 
-**Resume:** **+60%** batch throughput. Sync vendor REST inside TWS jobs → **async workers** (one file per task). State in **SQL/JPA**. Timeout or non-2xx → **FAILED**.
+**On your resume:** Batch work got about **60% faster**. You stopped calling the vendor one-by-one inside the night job. Workers handle **one file each**. The database stores whether the step succeeded. A timeout is a **failure**, not a success.
 
 ---
 
 ## STAR — the story
 
-### S — Situation (the problem)
+### S — Situation (what the world looked like)
 
-TWS jobs called the vendor **one record at a time and waited**. Each slow call blocked the next. End-of-day windows ran long. Worse: a **timeout** was sometimes treated as success. Downstream jobs then ran on a **false SUCCESS**. The data was wrong and the scheduler thought the step was done.
+The night jobs already called the vendor. The problem was **how** they called. The job picked up a record, called the vendor, and **waited** until that call finished before it touched the next record. If each call takes a fraction of a second and you have a large file, the clock runs out. End-of-day and month-end were the painful windows, because that is when the files are biggest.
 
-### T — Task (your job)
+There was a worse bug than slowness. Sometimes the call **timed out**. The code did not know if the vendor had done the work. In a bad version of this, the step was still marked **SUCCESS**. The next job in the IBM TWS chain believed the work was done and moved on. That is called a **false success**: the scheduler is happy, the data is not.
 
-Make the same nightly volume finish faster **without lying about success**.
+### T — Task (what you were asked to do)
 
-### A — Action (what you did)
+Finish the **same amount of work** faster, and **never mark a step successful unless you know it succeeded**.
 
-1. Replace the sync loop with a **fixed thread pool** (bounded so you do not flood the vendor).
-2. **One file = one task.** A bad file does not corrupt another file’s memory.
-3. Persist step state in SQL: `PENDING → IN_PROGRESS → SUCCESS` or `FAILED`.
-4. Set connect and read **timeouts**.
-5. **Timeout or non-2xx → FAILED.** SUCCESS only when success rules are explicit.
-6. Do **not** hold a database transaction open for the whole HTTP wait.
-7. Failed steps go to the **replay API** later. They are not fixed with hand SQL.
+### A — Action (what you actually changed)
+
+You stopped doing the vendor calls inside one long waiting loop.
+
+1. The scheduler still starts the job. That part did not go away.
+2. The job loads the files (or work items) and hands them to a **fixed pool of workers**. “Fixed” matters: if you start unlimited threads, you can knock over the vendor or your own database.
+3. **One file is one task.** If one file is bad, it does not scramble the memory of another file.
+4. Before the call, the database row says `IN_PROGRESS`. After a real success it says `SUCCESS`. After a timeout or a non-success HTTP code it says `FAILED`.
+5. The HTTP client has a **connect timeout** and a **read timeout**. You do not wait forever.
+6. You do **not** hold a database transaction open while you wait on the vendor. That would pin a database connection for the whole slow call. You save state, call the vendor, then save the outcome.
+7. Failed files are fixed later through the **replay API**, not by someone editing the table by hand.
 
 ```
-TWS starts the job
-  → load files
-  → bounded workers
-       IN_PROGRESS → vendor call
-       success rules → SUCCESS
-       timeout / non-2xx → FAILED
-  → tell TWS the real outcome
+Night job starts
+  → list of files
+  → a small pool of workers
+       each worker: one file, one vendor call, one database status
+  → scheduler sees the real result
 ```
 
-> **ELI5:** One cashier who waits on every card is sync. Several cashiers plus a board of done/failed tickets is async.
+> **Simple picture:** One cashier who waits for every card machine is the old way. Several cashiers, with a board that says done or failed, is the new way. You still do not let a hundred cashiers hit the vendor at once.
 
-### R — Result
+### R — Result (what changed)
 
-About **60%** higher throughput on a **comparable** input volume (records per hour or wall-clock). False SUCCESS stopped. Recovery is a replay, not a database edit.
+On a **comparable** volume (same kind of night, same input size), throughput rose by about **60%**. That means more records per hour, or less wall-clock time, not a made-up percentage. The important quality result is separate from speed: a timeout is **FAILED**, so the next job does not run on a lie.
 
-Fill exact before/after numbers in [Personal facts](#/02a-personal-facts).
+Write your real before-and-after numbers in [Personal facts](#/02a-personal-facts) before the interview.
 
 ---
 
-## Say the STAR in 60 seconds
+## Say it in about 60 seconds
 
-> Vendor calls inside overnight jobs were synchronous, so one slow call blocked the batch. Timeouts could be marked success, and the next job would trust that lie. I moved the work to a bounded worker pool, one file per task, with status in SQL. Timeout or a non-2xx response marks FAILED. Throughput rose about 60% on the same volume, and failed steps are replayed through an API.
+> The night job called the vendor and waited for every call before the next one, so big files missed the window. Worse, a timeout could be stored as success, and the next scheduled job would trust that. I changed it to a small pool of workers, one file each, with the status saved in the database. If the call times out or the vendor does not return success, the step is FAILED. On the same volume, throughput went up about 60 percent, and failed files are replayed through an API instead of a manual database edit.
 
 ---
 
-## If they go deeper
+## If they ask more
 
-| Column | Why |
-|--------|-----|
-| file / step id | What ran |
-| status | PENDING, IN_PROGRESS, SUCCESS, FAILED |
-| attempt_count | How many tries |
-| last_error | Why it failed |
-| vendor_ref | Correlation id |
-
-| Question | Answer |
-|----------|--------|
-| Vendor overload? | Cap the pool. Back off on 429/5xx. Open a circuit when errors spike |
-| Why not only more TWS jobs? | The app owns isolation, state, and the shared vendor quota |
-| Thread safety? | One file per task. Little shared mutable state |
-
-<details>
-<summary>How does TWS learn about failure?</summary>
-If a critical step is FAILED, the job result is failure. Downstream jobs do not start.
-</details>
+| They ask | You say |
+|----------|---------|
+| Won’t many workers overload the vendor? | The pool size is capped. If the vendor says “slow down” (429) or returns 5xx, you back off. If errors spike, you stop calling for a bit. |
+| Why not just start more scheduler jobs? | The scheduler can start jobs, but it does not know your rule “timeout means failed,” and it does not share one vendor speed limit cleanly. The application does. |
+| What is stored? | File or step id, status, how many attempts, the error text, the vendor reference, the business date. |
 
 ## Blind check
 
-- [ ] Tell S-T-A-R without notes
-- [ ] Explain false SUCCESS and the fix in two sentences
-- [ ] Say why the DB transaction does not cover the HTTP call
+- [ ] Explain the problem as both “too slow” and “false success”
+- [ ] Explain one file per worker and why the pool is limited
+- [ ] Say the 60% line with “same volume”
 
 Next: [Spring Boot refactor](#/06-spring-refactor)

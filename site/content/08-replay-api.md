@@ -1,72 +1,64 @@
-# Batch replay API
+# Replay API
 
-**Resume:** Spring Boot API so ops can **re-run failed payment-load steps** after a TWS failure **without editing the database by hand**.
+**On your resume:** You built an API so operations can **run a failed batch step again** without someone opening the database and editing rows by hand.
 
 ---
 
 ## STAR — the story
 
-### S — Situation (the problem)
+### S — Situation (what the world looked like)
 
-A failed step **blocks every TWS job after it**. At month-end that stops the night. The workaround was an engineer running **SQL by hand** to flip status or requeue a row. That has no permission check, no audit, and it is easy to mark a bad step SUCCESS or to send the same payment twice.
+Night jobs fail. A file is late, the vendor times out, or a mapping is wrong. After the async change, those steps sit in the database as **FAILED**. That is correct. The next problem is **how you fix them**.
 
-### T — Task (your job)
+The old shortcut was a person with database access running an `UPDATE` to flip the status back, or re-running a mystery script. That is dangerous. There is no record of who did it. There is no check that the step is actually allowed to run again. Two people can “fix” the same payment and post it twice. And the next night, nobody can explain what changed.
 
-Give operations a **safe button**: re-trigger only failed steps, with a log of who did it.
+### T — Task (what you were asked to do)
 
-### A — Action (what you did)
+Give operations a **supported way** to retry a failed step: an API, with rules, so the database is not the user interface.
+
+### A — Action (what you actually built)
+
+The API is small on purpose.
+
+1. Someone calls something like `POST /replay` with the step id or the file id, and a reason.
+2. The service loads the row. It only continues if the status is **FAILED** (or another status you explicitly allow). A step that is already **SUCCESS** is refused. You do not replay a payment that already went through.
+3. It checks the business rule: is this kind of step safe to run twice? If running it twice would create a second payment, the API refuses unless the vendor call itself is idempotent.
+4. It sets the row back to a runnable state and runs the **same code path** the night job uses. There is not a second, secret “ops version” of the logic.
+5. It writes an **audit row**: who asked, when, which step, and why. That replaces the invisible SQL update.
+6. If the replay fails again, the status goes back to FAILED with the new error. It does not get forced to SUCCESS.
 
 ```
-Ops calls POST /ops/replay/{stepId}
-  → must be an authorized ops user
-  → step must be FAILED (not SUCCESS)
-  → set PENDING, add 1 to attempt_count
-  → write an audit row (who, when, which step)
-  → worker runs the file again
+Ops calls the API
+  → is this step FAILED?
+  → is a second run safe?
+  → run the normal worker code
+  → save the new status and who requested it
 ```
 
-| Safety rail | Why |
-|-------------|-----|
-| Auth | Random callers cannot replay |
-| Only FAILED | Do not redo a step that already succeeded |
-| Attempt cap | After N tries, stop and escalate |
-| Idempotent vendor call | A second try must not double-post |
-| Audit row | Compliance can see who replayed what |
+### R — Result (what changed)
 
-> **ELI5:** A keycard door with a log. Not a screwdriver on the lock.
-
-### R — Result
-
-Ops unblock a failed payment-load step without a DBA. The trail is in the audit table. Downstream TWS jobs can start again after a real SUCCESS.
+A failed file can be retried in a controlled way. People stop editing production tables to “unstick” a batch. Every replay has a name and a time attached to it.
 
 ---
 
-## Say the STAR in 60 seconds
+## Say it in about 60 seconds
 
-> A failed batch step blocked the rest of the night, and the fix was hand-edited SQL. That is unsafe and has no audit. I built a replay API. Ops can requeue a FAILED step only. The API checks permission, increments the attempt count, and writes who did it. The worker runs the file again. A successful step cannot be replayed by accident.
+> After we started storing real FAILED statuses, ops still needed a way to try again. Before, someone would update the database by hand, with no record and a risk of posting the same payment twice. I added a replay API. It only accepts a failed step, it runs the same code the night job uses, and it stores who requested it and why. If the step already succeeded, the API says no.
 
 ---
 
-## If they go deeper
+## If they ask more
 
-| vs TWS restart | App replay |
-|----------------|------------|
-| TWS can restart a job | The API knows business rules: only FAILED, attempt cap, vendor idempotency |
-
-<details>
-<summary>What if replay would duplicate a vendor post?</summary>
-Refuse the replay, or send the same idempotency key so the vendor treats it as the same request.
-</details>
-
-<details>
-<summary>How do you test it?</summary>
-SUCCESS replay returns an error. FAILED replay creates an audit row. No auth returns 403.
-</details>
+| They ask | You say |
+|----------|---------|
+| Why not just re-run the whole night job? | That would redo work that already succeeded. Replay targets the failed step. |
+| What if two people click replay? | The status check and the database update happen together so only one run proceeds. |
+| What do you store? | Step id, requester, time, reason, attempt count, result. |
 
 ## Blind check
 
-- [ ] Tell S-T-A-R without notes
-- [ ] Name four safety rails
-- [ ] Say why hand SQL is the problem
+- [ ] Explain the danger of a manual database edit
+- [ ] Say which statuses the API will accept
+- [ ] Say that replay uses the same code as the night job
 
-Next: [Jenkins, JAR, Veracode](#/09-cicd-jenkins)
+Next: [Jenkins and releases](#/09-cicd-jenkins)

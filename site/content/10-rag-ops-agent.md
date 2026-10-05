@@ -1,83 +1,69 @@
-# RAG ops agent
+# RAG operations assistant
 
-**Resume:** Production **RAG** agent in **Python / LangChain / PgVector**. Runbooks + ServiceNow / Jira. **Human in the loop.** **MTTR about 40% lower** on the pilot.
+**On your resume:** You built a **Python** assistant with **LangChain** and **PgVector**. It reads operations tickets (ServiceNow / Jira) and runbooks, suggests a likely cause and the next step, and a **person still approves** before anything changes. Mean time to resolve dropped about **40%**.
 
-**CAUTION:** Do not say the model fixes production by itself.
+**Say this carefully:** The model **suggests**. It does **not** fix production by itself.
 
 ---
 
 ## STAR — the story
 
-### S — Situation (the problem)
+### S — Situation (what the world looked like)
 
-Ops handled repeat incidents by **searching runbooks by hand**. Time to resolve was high. A plain LLM can **invent steps** that are not in the runbook. Ticket text is also **untrusted** — it can try to trick the model into calling tools (prompt injection). An agent that restarts payments with no human is not acceptable in a bank.
+When a night job fails, the on-call engineer opens a ticket in **ServiceNow** or **Jira**, then hunts through old tickets, wiki pages, and runbooks to find a similar failure. That search is slow at 2 a.m. The same timeout might have happened last month, but the write-up is buried.
 
-### T — Task (your job)
+A tempting shortcut is “let a chatbot read the ticket and restart the job.” That is unsafe. The model can sound confident and still be wrong. Restarting the wrong step can post a payment twice or hide a real data problem.
 
-Help ops find the right runbook steps faster, **without** unsupervised production changes.
+### T — Task (what you were asked to do)
 
-### A — Action (what you did)
+Shorten the time from “ticket opened” to “engineer knows the likely next step,” **without** letting the model change production on its own.
 
-1. Split runbooks into chunks and store **embeddings in Postgres (PgVector)**.
-2. On an incident, **retrieve** the closest chunks first (RAG).
-3. The model drafts next steps **from those chunks** and can cite them.
-4. If retrieval is empty or weak, **do not guess**. Send it to a human.
-5. Tools (ServiceNow / Jira notes) are an **allowlist**. Ticket text is data, not instructions.
-6. A **human approves** any production action.
+### A — Action (what you actually built)
+
+This pattern is called **RAG**: retrieval-augmented generation. In plain words, the model is not asked to remember the bank. You **look up** the relevant notes first, then the model writes an answer **from those notes**.
+
+1. Runbooks and resolved tickets are split into chunks and stored as vectors in **Postgres with PgVector**. A vector is a numeric fingerprint of the text so “vendor timeout on payment sync” can find older write-ups that use different words.
+2. A new ticket comes in. The app embeds the ticket text and searches for the closest chunks.
+3. **LangChain** sends the model only those chunks plus the question: what is the likely cause, and what should the human check next?
+4. The answer comes back as a **suggestion** on the ticket: possible cause, the runbook section, and the checks (scheduler log, your status row, vendor status).
+5. A **person** reads it. If they agree, they follow the runbook or call the replay API. The model never gets a button that restarts jobs or edits the database.
+6. If the search finds nothing useful, the assistant says it does not know. It does not invent a procedure.
 
 ```
-Incident → search runbook vectors → draft with citations
-        → human approves before a risky action
+Ticket text
+  → search similar runbooks and old tickets (PgVector)
+  → model writes a suggestion from those pages only
+  → human reads it and decides
+  → human runs the real fix (replay API or the runbook)
 ```
 
-> **ELI5:** The model must open the right page of the runbook before it answers. It does not answer from memory alone.
+### R — Result (what changed)
 
-### R — Result
+Engineers spent less time hunting for the same failure. **Mean time to resolve** (how long a ticket stays open) dropped about **40%** on the incidents this assistant covered. The model stayed a reader and a drafter. Production changes stayed with people.
 
-On the **pilot incident class**, mean time to resolve fell by about **40%**. Humans still approve production actions. The gain is faster context, not auto-remediation.
-
-Fill the sample size in [Personal facts](#/02a-personal-facts).
+Write the sample size and how you measured the 40% in [Personal facts](#/02a-personal-facts) before the interview.
 
 ---
 
-## Say the STAR in 60 seconds
+## Say it in about 60 seconds
 
-> Ops lost time hunting runbooks, and a free-form model would invent steps or take ticket text as orders. I built a RAG assistant: runbooks live as vectors in Postgres, the model answers from retrieved chunks, and a human approves production actions. If nothing relevant is retrieved, it does not guess. On the pilot set, MTTR fell about 40%.
+> On-call used to spend a long time searching old tickets and runbooks after a batch failure. I built a Python assistant that stores those documents in Postgres with PgVector, finds the closest ones for a new ticket, and asks the model to suggest a cause and a next check using only those pages. A person still approves every action. The model does not restart jobs. On the incidents we measured, time to resolve dropped about 40 percent.
 
 ---
 
-## If they go deeper
+## If they ask more
 
-| Word | One line |
-|------|----------|
-| RAG | Retrieve documents, then generate |
-| Embedding | Numbers that represent meaning |
-| PgVector | Vector search inside Postgres |
-| HITL | Human in the loop |
-| MTTR | Average time to resolve |
-| Prompt injection | Untrusted text tries to control tools |
-
-| Control | Rule |
-|---------|------|
-| Grounding | Cite the chunk |
-| Empty search | Escalate. Do not invent |
-| Tools | Allowlist only |
-| PII | Redact before the model when needed |
-
-<details>
-<summary>Why RAG instead of fine-tuning?</summary>
-Runbooks change. Retrieval stays current and you can show the page you used.
-</details>
-
-<details>
-<summary>Why Postgres for vectors?</summary>
-One database ops already know. You can filter by service or severity in SQL.
-</details>
+| They ask | You say |
+|----------|---------|
+| What if the suggestion is wrong? | The human ignores it. Nothing in production has changed yet. |
+| Why not fine-tune a model on all tickets? | The runbooks change. Retrieval uses the current pages. You can also see which page the answer came from. |
+| What data is in the index? | Operational notes and runbooks. Not a dump of customer personal data into the prompt. |
+| What is a vector here? | A list of numbers that represents the meaning of a paragraph, so search is by similarity, not only exact words. |
 
 ## Blind check
 
-- [ ] Tell S-T-A-R without notes
-- [ ] Draw retrieve → draft → human
-- [ ] Say the sentence: the model does not fix production alone
+- [ ] Explain the 2 a.m. problem in plain words
+- [ ] Explain RAG as “search first, then write from those pages”
+- [ ] Say who is allowed to restart a job
 
-Next: [Samsung, OSS, CodeReviewer](#/11-samsung-oss-project)
+Next: [Samsung and open source](#/11-samsung-oss-project)

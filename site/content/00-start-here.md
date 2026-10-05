@@ -41,12 +41,12 @@ Every Barclays deep dive uses the same order. Read top to bottom. Stop when the 
 
 | Block | Purpose |
 |-------|---------|
-| STAR | Situation = problem. Task = your job. Action = what you did. Result = the number |
-| 60-second STAR | Speak S-T-A-R in one pass |
+| STAR | Plain-English story: what the bank looked like, what your job was, what you changed, and the result |
+| 60-second STAR | Speak that story in one pass |
 | If they go deeper | Diagrams, SQL, failure tables |
 | Blind check | Pass this before Mark done |
 
-Writing style: short sentences, one idea per line, active voice (Simplified Technical English).
+Read the Situation first. It is written so you can picture the problem before the technical detail.
 
 Use **Mark done** only after you speak the answer with no notes.
 

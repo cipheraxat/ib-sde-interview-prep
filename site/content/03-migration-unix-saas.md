@@ -1,88 +1,85 @@
 # Unix to SaaS migration
 
-**Resume:** Legacy Unix → vendor SaaS on AWS. Java/Spring Boot for **80+** TWS processes. **5,000+/day** txns. **100K+** accounts.
+**On your resume:** You helped move payment operations off an old Unix system onto a vendor product hosted on AWS. You wrote Java / Spring Boot services for more than 80 scheduled business processes. Those services talk to the vendor over REST. The platform handles more than 5,000 transactions a day across more than 100,000 accounts.
 
-**CAUTION:** TWS = IBM Workload Scheduler. Not IB Trader Workstation.
+**Say this early:** On your resume, TWS means **IBM Workload Scheduler** (the tool that starts overnight jobs). It does **not** mean Interactive Brokers’ Trader Workstation.
 
 ---
 
 ## STAR — the story
 
-### S — Situation (the problem)
+### S — Situation (what the world looked like)
 
-Payment ops ran on a **legacy Unix** stack: shell scripts, file drops, and scheduled jobs. Change was slow. Tests were weak. Edge cases lived in people’s heads. The bank moved the product to a **vendor SaaS on AWS**, but the bank still had to call the vendor, track each step, and keep overnight batches correct.
+For years, payment operations at the bank ran on **old Unix servers**. Much of the work was shell scripts, files dropped on a shared disk, and jobs that a scheduler started at night. That setup had worked for a long time, but it was hard to change. There were few automated tests. A lot of the real rules lived only in people’s memory. When something failed at 2 a.m., you often had to read logs and guess.
 
-### T — Task (your job)
+The bank decided to stop running that old product itself and use a **vendor’s software instead**. The vendor hosts that software on **AWS** (this is called SaaS: they run the app, you connect to it). The bank could not simply “switch off Unix on Friday.” Overnight batches still had to move money-related status, call the vendor, and know whether each step really finished. If a step is marked done when it is not, the next job in the chain runs on bad data.
 
-Build the **integration layer**: Java / Spring Boot services that **IBM TWS** starts. Call vendor **REST** APIs. Store step state in **MySQL**. Cover workflows in a program of **80+** processes, **5,000+** daily transactions, **100K+** accounts. Do not claim you migrated the whole bank alone.
+### T — Task (what you were asked to do)
 
-### A — Action (what you did)
+Your job was the **middle layer**, not the whole bank migration. You built **Java / Spring Boot services** that sit between the scheduler and the vendor. IBM TWS starts a job. Your service does the real work: read the input, call the vendor’s REST API, and **save the result in MySQL** so everyone can see success or failure later. The program covered **80+ business processes**, **5,000+ transactions a day**, and **100,000+ accounts**. You contributed to that program. You did not migrate the entire bank by yourself.
 
-1. TWS job calls your API (example: `POST /integration/payment-sync`).
-2. Service reads pending rows or an inbound file.
-3. Validate → map ids → call vendor REST.
-4. Persist **SUCCESS** or **FAILED** plus a vendor correlation id.
-5. Return success to TWS only when acceptance rules pass. Downstream jobs wait on this step.
-6. During migration, run **old and new paths in parallel**. Compare reports. Flip only when the compare is clean.
-7. Rollback = point TWS back to the **old job definitions**.
+### A — Action (what you actually built)
+
+Picture one nightly job, “sync payment status”:
+
+1. At the scheduled time, **IBM TWS** starts the job. TWS is a chain of jobs. Job B does not start until job A succeeds.
+2. The job calls your service, for example `POST /integration/payment-sync`.
+3. Your service reads the work: rows waiting in a table, or a file that landed on disk.
+4. For each item it checks the data, maps the bank’s ids to the vendor’s ids, and calls the vendor’s REST API.
+5. It **writes the outcome in MySQL**: SUCCESS or FAILED, plus the vendor’s reference id and the time.
+6. It tells TWS “this step is good” only when the acceptance rules pass. If not, the job fails and **later jobs stay blocked**. That is safer than pretending success.
+7. While the new path was new, the **old Unix path and the new path ran together**. You compared the results. Only after the compare looked right did the new path become the one that counts.
+8. If the new path misbehaved, rollback was simple in concept: point TWS back at the **old job definitions**.
 
 ```
-IBM TWS → Spring Boot (Linux) → Vendor REST → AWS SaaS
-                ↓
-         MySQL step state
-Legacy Unix stays until compare is clean
+IBM TWS  →  your Spring Boot service on Linux  →  vendor REST API  →  vendor app on AWS
+                      ↓
+              MySQL (did this step succeed?)
+Old Unix path stays until the compare is clean
 ```
 
-**Failure rules you must say**
+**When the vendor call goes wrong, you do not guess:**
 
-| Case | What you do |
-|------|-------------|
-| 5xx / network blip | Retry only if the call is idempotent |
-| 4xx business error | Do not blind-retry. Mark FAILED. Alert |
-| Timeout | FAILED until you confirm. Never invent SUCCESS |
-| Vendor down | Fail fast. Do not hang the TWS stream |
-| Same file replay | Must not double-post |
+| What happened | What your service does |
+|---------------|------------------------|
+| Network blip or vendor 5xx | Retry only if doing it twice cannot create a second payment |
+| Vendor says your request is invalid (4xx) | Do not keep retrying. Mark FAILED and alert |
+| The call times out | Mark FAILED until you know the truth. Never mark SUCCESS just because you stopped waiting |
+| Vendor is fully down | Fail fast so the whole night batch does not hang |
+| Someone runs the same file again | Must not post the same payment twice |
 
-### R — Result
+### R — Result (what changed)
 
-Integration services in production for that scope. Batches stay correct because state is in SQL and failures block downstream jobs instead of lying. Cutover is reversible.
+The integration services run in production for that scope. Each step has a row in the database, so ops can see what failed. Downstream jobs run only after a real success. The bank could move off the old Unix path gradually, with a way back.
 
 ---
 
-## Say the STAR in 60 seconds
+## Say it in about 60 seconds
 
-> Payment ops sat on old Unix scripts. The bank moved the product to a vendor SaaS on AWS, but someone still had to call the vendor and track each step. I built Spring Boot services that IBM TWS starts. They call vendor REST and store SUCCESS or FAILED in MySQL. Scope is 80+ workflows, 5,000+ daily transactions, 100K+ accounts. We ran old and new paths together and compared results before cutover. Rollback is the old TWS jobs.
+> Payment operations used to be Unix scripts and night jobs. The bank moved the product to a vendor system on AWS, but we still had to call that vendor and know if each step really finished. I built Spring Boot services that IBM’s job scheduler starts. They call the vendor’s REST API and save SUCCESS or FAILED in MySQL. That covers 80-plus workflows, 5,000-plus transactions a day, and 100,000-plus accounts. We ran the old path and the new path together and compared them before we trusted the new one. If we needed to go back, we pointed the scheduler at the old jobs again.
 
 ---
 
-## If they go deeper
+## If they ask more
 
-| Word | Meaning |
-|------|---------|
-| Job stream | A chain of jobs. Job B waits for job A |
-| Parallel run | Old path and new path at the same time |
-| Idempotency | Replay does not create a second payment |
-| Circuit breaker | Stop calling a dead vendor |
+| Word | Plain meaning |
+|------|----------------|
+| SaaS | The vendor runs the application. You integrate with it. |
+| Job stream | A chain of night jobs. The next job waits for the previous one. |
+| Parallel run | Old system and new system both run so you can compare. |
+| Idempotent | Doing the same request twice does not create two payments. |
 
-**Safe ownership:** “I contributed to the program. I owned the integration services in my area.”  
-**80+** = workflows, not 80 microservices. **5,000/day** is batch-window load, not high-frequency trading.
-
-**Debug a stuck stream:** TWS log → app log / correlation id → SQL step table → vendor status → replay or fix → unblock the next job.
+**How you debug a stuck night:** scheduler log → your application log → the SQL row for that step → vendor status → fix or replay → the next job can run.
 
 <details>
-<summary>Why Spring Boot instead of more shell?</summary>
-Typed APIs, dependency injection, JPA state, health checks, tests, one fat JAR per environment.
-</details>
-
-<details>
-<summary>How do you secure vendor calls?</summary>
-OAuth2 or mTLS. Secrets in a vault. Private network. Audit log. Veracode in CI.
+<summary>Why Java services instead of more shell scripts?</summary>
+Scripts were hard to test and easy to get subtly wrong. A Spring Boot service has clear inputs, a database row for every step, health checks, and tests you can run before production.
 </details>
 
 ## Blind check
 
-- [ ] Tell S-T-A-R without notes
-- [ ] Draw TWS → Spring → vendor → DB
-- [ ] Name five failure rules
+- [ ] Tell the story: old Unix, vendor on AWS, your middle layer, compare before cutover
+- [ ] Explain why a timeout must not be called success
+- [ ] Say what TWS means on your resume
 
 Next: [PII and tokenization](#/04-pii-tokenization)

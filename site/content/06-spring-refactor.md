@@ -1,71 +1,67 @@
 # Spring Boot refactor
 
-**Resume:** Core Java → **Maven multi-module Spring Boot** + **Spring Data JPA**. Tests with **JUnit/Mockito**. Code reviews.
+**On your resume:** You took an older plain-Java integration program and turned it into a **Maven multi-module Spring Boot** service with **JPA** for the database, plus **unit tests** (JUnit and Mockito) and code review.
 
 ---
 
 ## STAR — the story
 
-### S — Situation (the problem)
+### S — Situation (what the world looked like)
 
-The integration code was **Core Java**: objects created by hand, config scattered, SQL mixed into business logic, and weak tests. A timeout bug was easy to miss. Every change was risky because you could not prove failure behavior before production.
+The integration logic existed, but it was **plain Java**: a program that started from a `main` method, objects created with `new` all over the place, configuration copied between environments, and SQL strings mixed into the business rules. There were few tests.
 
-### T — Task (your job)
+That matters because the dangerous bug in this area is subtle. A vendor call times out, and the code still records success. In a messy codebase you cannot easily **prove** that a timeout becomes FAILED before you ship. Every change felt risky. People were afraid to touch the failure path.
 
-Turn that code into a service you can test, review, and ship the same way in every environment — without changing the business outcome (vendor calls + step state).
+### T — Task (what you were asked to do)
 
-### A — Action (what you did)
+Restructure the same business behavior so a new engineer can see where HTTP stops and database work starts, and so you can **test the failure path** without calling the real vendor.
 
-Split the app into Maven modules and Spring layers:
+### A — Action (what you actually changed)
+
+You split the program into clear layers and Maven modules:
 
 ```
-HTTP → Controller → Service → Repository (JPA) → DB
-                 ↘ Vendor client (HTTP stays outside a long DB transaction)
+HTTP request
+  → Controller   (check the input, return a status code)
+  → Service      (the business rule: when is this SUCCESS or FAILED?)
+  → Repository   (save the step row with JPA)
+The vendor HTTP call sits beside this, not inside a long database transaction.
 ```
 
-| Layer | Job |
-|-------|-----|
-| Controller | Validate the request. Return status codes |
-| Service | Business rules and status changes |
-| Repository | Persist `BatchStep` rows |
-| Vendor client | Call REST. Timeouts live here |
+What that means in practice:
 
-- **Constructor injection** so tests can pass a fake vendor client.
-- **JUnit + Mockito:** timeout throws → assert status is **FAILED**, not SUCCESS.
-- Status changes go through the service (not random setters).
-- Code review looks for missing failure handling before merge.
+- **Controller** is the door. It does not contain the payment rules.
+- **Service** decides the status change. Other classes do not randomly set SUCCESS.
+- **Repository** is how you read and write the step table. Spring Data JPA saves you from hand-written boilerplate, but you still need to understand the SQL.
+- **Constructor injection** means the service receives its vendor client in the constructor. In a test you pass a **fake** client (Mockito). You tell the fake client to throw a timeout, then you assert the status is **FAILED**.
+- Code review looks for “did we forget the failure case?” before the change merges.
 
-### R — Result
+You did not rewrite the bank’s scheduler. You made **your** service understandable and testable.
 
-The same integration behavior, but changes are testable. The false-success class of bugs is caught in unit tests. The artifact later becomes one fat JAR for Jenkins.
+### R — Result (what changed)
+
+The integration behavior stayed the same for the business, but changes became safer. The class of bug “timeout stored as success” can be caught by a unit test instead of by a bad night in production. The same structure later packages as one runnable JAR for the release pipeline.
 
 ---
 
-## Say the STAR in 60 seconds
+## Say it in about 60 seconds
 
-> The integration code was plain Java with weak tests, so failure behavior was hard to prove. I refactored it into a Maven multi-module Spring Boot service: controller, service, JPA repository, and a vendor client. Tests use Mockito. A timeout must mark the step FAILED. We do not hold a database transaction open while we wait on the vendor.
+> The integration code was plain Java with weak tests, so we could not easily prove what happens on a vendor timeout. I refactored it into Spring Boot with separate layers: the HTTP door, the business rules, and the database. Tests use a fake vendor client. If that fake client times out, the test expects the step to be FAILED. We also do not keep a database transaction open while we wait on the vendor, because that holds connections for too long.
 
 ---
 
-## If they go deeper
+## If they ask more
 
-| Trap | Correct line |
-|------|----------------|
-| `@RestController` | Controller + JSON body |
-| `@Transactional` rollback | Unchecked exceptions roll back by default |
-| Self-call inside the same class | Spring proxy is skipped. The transaction may not start |
-| Long transaction | Do not wrap the vendor HTTP wait |
-| N+1 queries | Fetch the association in one query (join fetch) |
-
-<details>
-<summary>Why modules?</summary>
-API, core, and persistence stay separate. Dependencies point inward. Reviews stay smaller.
-</details>
+| They say | You answer in plain words |
+|----------|---------------------------|
+| What is dependency injection? | The framework hands the service the objects it needs. Tests can hand it a fake. |
+| What is a transaction trap? | If you open a database transaction and then wait 10 seconds on HTTP, you occupy a connection the whole time. Save, call, then save the result. |
+| What is N+1? | You load 100 parent rows, then the code quietly runs one extra query per row. Fix it by loading the related data in one query. |
 
 ## Blind check
 
-- [ ] Tell S-T-A-R without notes
-- [ ] Draw controller → service → repository
-- [ ] Name one transaction trap
+- [ ] Explain why the old code was risky, not just “it was legacy”
+- [ ] Name the three layers and what each one refuses to do
+- [ ] Describe the timeout test in one sentence
 
 Next: [Kafka events](#/07-kafka)
