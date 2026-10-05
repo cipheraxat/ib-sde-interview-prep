@@ -26,7 +26,7 @@ If you don’t clarify, the interviewer may think you claimed trading-platform e
 | Round | Focus | Lessons |
 |-------|--------|---------|
 | Recruiter / HR | Story, Why IB, notice period | Personal facts → Framing → Traps → Behavioral → Cheat sheet |
-| Technical screen | 2 Barclays bullets + Java/SQL | Tokenization or Async + Java/Spring core + Coding solutions |
+| Technical screen | 2 Barclays bullets + Java/SQL | Tokenization or Async + Java/Spring core + [Coding solutions](#/12-coding-sql) + [Java DSA pen and paper](#/12b-java-dsa) |
 | Deep technical | Design + failure modes | Tokenization (proof/recovery/cutover), Async, Kafka, System design |
 | Hiring manager | Ownership, judgment, culture | Behavioral + RAG HITL + Traps |
 | Every week | Practice loop | [7-day drills & mocks](#/16-drill-schedule) |

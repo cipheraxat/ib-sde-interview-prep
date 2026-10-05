@@ -15,6 +15,7 @@
   {"id":"11-samsung-oss-project","title":"Samsung, OSS, CodeReviewer","section":"Extras","mins":20},
   {"id":"12a-java-spring-core","title":"Java & Spring core","section":"Interview rounds","mins":30},
   {"id":"12-coding-sql","title":"Coding & SQL solutions","section":"Interview rounds","mins":40},
+  {"id":"12b-java-dsa","title":"Java DSA pen and paper","section":"Interview rounds","mins":90},
   {"id":"13-system-design","title":"System design","section":"Interview rounds","mins":30},
   {"id":"14-behavioral-ib","title":"Behavioral & Why IB","section":"Interview rounds","mins":15},
   {"id":"16-drill-schedule","title":"7-day drills & mocks","section":"Interview rounds","mins":20},

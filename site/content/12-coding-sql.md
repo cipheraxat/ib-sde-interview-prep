@@ -2,6 +2,8 @@
 
 Don’t only list problems. Rehearse these **out loud** with a timer (15–20 min each).
 
+The full pen-and-paper set, question then answer, is [Java DSA pen and paper](#/12b-java-dsa).
+
 ## How you narrate
 
 1. Restate + example  
