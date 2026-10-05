@@ -1,101 +1,71 @@
 # Spring Boot refactor
 
-**Resume:** Core Java → **Maven multi-module Spring Boot** + **Spring Data JPA**. OOP/SOLID/patterns. **JUnit/Mockito**, integration tests, code reviews.
+**Resume:** Core Java → **Maven multi-module Spring Boot** + **Spring Data JPA**. Tests with **JUnit/Mockito**. Code reviews.
 
 ---
 
-## 1. Say this first (30s)
+## STAR — the story
 
-> Legacy Core Java → Maven multi-module Spring Boot with JPA, clear layers, constructor DI, JUnit/Mockito. Safer to change; failure paths tested.
+### S — Situation (the problem)
 
----
+The integration code was **Core Java**: objects created by hand, config scattered, SQL mixed into business logic, and weak tests. A timeout bug was easy to miss. Every change was risky because you could not prove failure behavior before production.
 
-## 2. Words
+### T — Task (your job)
 
-| Word | Meaning | Probe |
-|------|---------|-------|
-| Core Java | Manual wiring, uneven structure | What you left |
-| Spring Boot | DI, embedded server, profiles, actuator | Why banks use it |
-| DI | Spring supplies deps (prefer ctor) | Testability |
-| Module | Maven boundary (api/core/persistence) | Dependency direction |
-| JPA repo | Entity ↔ table; derived/`@Query` | Still know SQL |
-| `@Transactional` | DB txn around method | Rollback defaults |
-| Fat JAR | App + deps + server one artifact | Bullet 7 |
+Turn that code into a service you can test, review, and ship the same way in every environment — without changing the business outcome (vendor calls + step state).
 
----
+### A — Action (what you did)
 
-## 3. How it works
+Split the app into Maven modules and Spring layers:
 
 ```
-HTTP → @RestController → @Service → JpaRepository → DB
-                      ↘ VendorClient (no long txn around HTTP)
+HTTP → Controller → Service → Repository (JPA) → DB
+                 ↘ Vendor client (HTTP stays outside a long DB transaction)
 ```
 
-**Modules:** `api` (HTTP) · `core` (rules) · `persistence` (entities/repos)
-
-**SOLID map**
-
-| Idea | Example |
-|------|---------|
-| SRP | VendorClient ≠ ReconService ≠ ReplayController |
-| DIP | Depend on `VendorClient` interface |
-| Encapsulation | Status transitions only via service methods |
-| Patterns | Adapter (vendor), State (step), Strategy (retry) |
-
-```java
-@Service
-public class PaymentSyncService {
-  private final VendorClient vendor;
-  private final StepRepository steps;
-  public PaymentSyncService(VendorClient vendor, StepRepository steps) {
-    this.vendor = vendor; this.steps = steps;
-  }
-}
-@Test void marksFailedOnTimeout() {
-  when(vendor.update(any())).thenThrow(new SocketTimeoutException());
-  // assert FAILED, not SUCCESS
-}
-```
-
----
-
-## 4. Traps / rules
-
-| Topic | Say |
+| Layer | Job |
 |-------|-----|
-| `@RestController` | `@Controller` + `@ResponseBody` |
-| Rollback | Unchecked → rollback by default; checked often not |
-| Self-invoke | Same-class call bypasses proxy → no txn |
-| Long txn | Never wrap vendor HTTP in one `@Transactional` |
-| N+1 | Lazy loops; fix join fetch / entity graph |
-| Pool | HikariCP size ≈ concurrent DB work |
+| Controller | Validate the request. Return status codes |
+| Service | Business rules and status changes |
+| Repository | Persist `BatchStep` rows |
+| Vendor client | Call REST. Timeouts live here |
+
+- **Constructor injection** so tests can pass a fake vendor client.
+- **JUnit + Mockito:** timeout throws → assert status is **FAILED**, not SUCCESS.
+- Status changes go through the service (not random setters).
+- Code review looks for missing failure handling before merge.
+
+### R — Result
+
+The same integration behavior, but changes are testable. The false-success class of bugs is caught in unit tests. The artifact later becomes one fat JAR for Jenkins.
 
 ---
 
-## 5. Say this (2 min)
+## Say the STAR in 60 seconds
 
-> Old Core Java was hard to test. Refactor to Spring Boot modules: controllers HTTP, services rules, repos state. Ctor injection + Mockito for timeout→FAILED tests. Vendor calls outside long DB transactions. Reviews catch missing failure handling before Jenkins promote.
-
----
-
-## 6. Top questions
-
-<details><summary>Bean scopes?</summary>
-Singleton default; prototype per inject; request/session for web.
-</details>
-<details><summary>How Spring Boot auto-config?</summary>
-Classpath + `@ConditionalOn*`; starters pull opinionated defaults you can override.
-</details>
-<details><summary>Testing pyramid here?</summary>
-Unit (service+mocks) · slice/integration (repo/HTTP) · pipeline smoke.
-</details>
+> The integration code was plain Java with weak tests, so failure behavior was hard to prove. I refactored it into a Maven multi-module Spring Boot service: controller, service, JPA repository, and a vendor client. Tests use Mockito. A timeout must mark the step FAILED. We do not hold a database transaction open while we wait on the vendor.
 
 ---
 
-## 7. Blind check
+## If they go deeper
 
-- [ ] Draw layers + no-txn-over-HTTP
-- [ ] One `@Transactional` trap
-- [ ] Speak 30s + test idea
+| Trap | Correct line |
+|------|----------------|
+| `@RestController` | Controller + JSON body |
+| `@Transactional` rollback | Unchecked exceptions roll back by default |
+| Self-call inside the same class | Spring proxy is skipped. The transaction may not start |
+| Long transaction | Do not wrap the vendor HTTP wait |
+| N+1 queries | Fetch the association in one query (join fetch) |
+
+<details>
+<summary>Why modules?</summary>
+API, core, and persistence stay separate. Dependencies point inward. Reviews stay smaller.
+</details>
+
+## Blind check
+
+- [ ] Tell S-T-A-R without notes
+- [ ] Draw controller → service → repository
+- [ ] Name one transaction trap
 
 Next: [Kafka events](#/07-kafka)

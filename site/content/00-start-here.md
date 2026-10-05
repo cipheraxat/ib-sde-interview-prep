@@ -41,13 +41,10 @@ Every Barclays deep dive uses the same order. Read top to bottom. Stop when the 
 
 | Block | Purpose |
 |-------|---------|
-| 1. Say this first | 30-second answer |
-| 2. Words you must know | Short definitions |
-| 3. How it works | Diagram and flow |
-| 4. Detail blocks | Proof, recovery, rules, or ownership |
-| 5. Say this (2 minutes) | Longer spoken answer |
-| 6. Top questions | Expand only if needed |
-| 7. Blind check | Pass this before Mark done |
+| STAR | Situation = problem. Task = your job. Action = what you did. Result = the number |
+| 60-second STAR | Speak S-T-A-R in one pass |
+| If they go deeper | Diagrams, SQL, failure tables |
+| Blind check | Pass this before Mark done |
 
 Writing style: short sentences, one idea per line, active voice (Simplified Technical English).
 

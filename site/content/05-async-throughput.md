@@ -1,99 +1,80 @@
 # Async and throughput
 
-**Resume:** **+60%** batch throughput. Sync vendor REST inside TWS → **async workers** (one file/execution). Step state in **SQL/JPA**. Timeout or non-2xx → **FAILED** (never false SUCCESS).
+**Resume:** **+60%** batch throughput. Sync vendor REST inside TWS jobs → **async workers** (one file per task). State in **SQL/JPA**. Timeout or non-2xx → **FAILED**.
 
 ---
 
-## 1. Say this first (30s)
+## STAR — the story
 
-> Sync vendor calls inside TWS jobs were slow and timeouts risked false SUCCESS. Bounded worker pool; one file per task; JPA step state; timeout/non-2xx → FAILED. Throughput +~60%.
+### S — Situation (the problem)
 
----
+TWS jobs called the vendor **one record at a time and waited**. Each slow call blocked the next. End-of-day windows ran long. Worse: a **timeout** was sometimes treated as success. Downstream jobs then ran on a **false SUCCESS**. The data was wrong and the scheduler thought the step was done.
 
-## 2. Words
+### T — Task (your job)
 
-| Word | Meaning | Why it matters |
-|------|---------|----------------|
-| Sync | Caller waits | Latency stacks in batch |
-| Async | Start work; track later | Parallel within bounds |
-| Thread pool | Fixed reusable workers | Cap concurrency |
-| Step state | Durable status in DB | Survive crash; drive TWS |
-| False SUCCESS | Marked OK when unknown | Downstream runs on a lie |
-| Backpressure | Slow intake when saturated | Protect vendor + DB |
-| Circuit breaker | Stop calling sick dep | Fail fast in window |
+Make the same nightly volume finish faster **without lying about success**.
 
-> **ELI5:** One cashier = sync. Many cashiers + status board = async.
+### A — Action (what you did)
 
----
-
-## 3. How it works
+1. Replace the sync loop with a **fixed thread pool** (bounded so you do not flood the vendor).
+2. **One file = one task.** A bad file does not corrupt another file’s memory.
+3. Persist step state in SQL: `PENDING → IN_PROGRESS → SUCCESS` or `FAILED`.
+4. Set connect and read **timeouts**.
+5. **Timeout or non-2xx → FAILED.** SUCCESS only when success rules are explicit.
+6. Do **not** hold a database transaction open for the whole HTTP wait.
+7. Failed steps go to the **replay API** later. They are not fixed with hand SQL.
 
 ```
-TWS kickoff → load files → fixed pool (size ≤ rate limit)
-  worker: PENDING→IN_PROGRESS → HTTP(timeouts) → SUCCESS | FAILED
-  → aggregate for TWS → replay API for FAILED later
+TWS starts the job
+  → load files
+  → bounded workers
+       IN_PROGRESS → vendor call
+       success rules → SUCCESS
+       timeout / non-2xx → FAILED
+  → tell TWS the real outcome
 ```
 
-**State:** `PENDING → IN_PROGRESS → SUCCESS` · else `FAILED → (replay) → PENDING`
+> **ELI5:** One cashier who waits on every card is sync. Several cashiers plus a board of done/failed tickets is async.
 
-**Columns:** `step_id/file_name`, `status`, `attempt_count`, `last_error`, `vendor_ref`, `updated_at`, `business_date`
+### R — Result
 
-```java
-ExecutorService pool = Executors.newFixedThreadPool(8);
-List<Future<?>> fs = new ArrayList<>();
-for (Path f : files) fs.add(pool.submit(() -> processOneFile(f)));
-for (Future<?> x : fs) x.get();
-pool.shutdown();
-// processOneFile: timeouts set; non-2xx/timeout → FAILED; never SUCCESS on guess
-```
+About **60%** higher throughput on a **comparable** input volume (records per hour or wall-clock). False SUCCESS stopped. Recovery is a replay, not a database edit.
 
-**Rule:** Do not hold `@Transactional` across vendor RTT — persist around the call.
+Fill exact before/after numbers in [Personal facts](#/02a-personal-facts).
 
 ---
 
-## 4. False SUCCESS + measuring 60%
+## Say the STAR in 60 seconds
 
-| | |
-|-|-|
-| Bug | Timeout → code assumes OK → SUCCESS → downstream lies |
-| Fix | Timeout/non-2xx → FAILED; SUCCESS only on explicit criteria |
-| Metric | records/hour or wall-clock for **same** input volume / comparable day |
-| Cap | pool size, 429 backoff, circuit on error spike |
-| Fill | exact before/after in [Personal facts](#/02a-personal-facts) |
+> Vendor calls inside overnight jobs were synchronous, so one slow call blocked the batch. Timeouts could be marked success, and the next job would trust that lie. I moved the work to a bounded worker pool, one file per task, with status in SQL. Timeout or a non-2xx response marks FAILED. Throughput rose about 60% on the same volume, and failed steps are replayed through an API.
 
 ---
 
-## 5. Say this (2 min)
+## If they go deeper
 
-> Bottleneck: sync vendor REST inside scheduled jobs — latency stacked; timeout path could mark SUCCESS. Fix: bounded pool, one file/task, JPA states PENDING/IN_PROGRESS/SUCCESS/FAILED, connect+read timeouts, FAILED on timeout/non-2xx so TWS deps do not run on lies. Cap parallelism to vendor limits; replay failed steps via API. Comparable volume → ~60% throughput.
+| Column | Why |
+|--------|-----|
+| file / step id | What ran |
+| status | PENDING, IN_PROGRESS, SUCCESS, FAILED |
+| attempt_count | How many tries |
+| last_error | Why it failed |
+| vendor_ref | Correlation id |
 
----
+| Question | Answer |
+|----------|--------|
+| Vendor overload? | Cap the pool. Back off on 429/5xx. Open a circuit when errors spike |
+| Why not only more TWS jobs? | The app owns isolation, state, and the shared vendor quota |
+| Thread safety? | One file per task. Little shared mutable state |
 
-## 6. Top questions
-
-<details><summary>Vendor overload?</summary>
-Bound pool; rate limits; backoff 429/5xx; circuit breaker; queue/DB backlog visible.
-</details>
-<details><summary>Why not only more TWS parallelism?</summary>
-App workers = isolation + durable state + shared quota control; TWS alone lacks business failure semantics.
-</details>
-<details><summary>Thread safety?</summary>
-Prefer isolated tasks (one file). Avoid shared mutable state; use concurrent structures only if needed.
-</details>
-<details><summary>How surface worker failure to TWS?</summary>
-Aggregate: any critical FAILED → non-zero / fail job; or partial success policy documented for ops.
-</details>
-<details><summary>Idempotent processOneFile?</summary>
-Same file replay uses vendor idempotency key / dedupe on business key; status machine prevents double SUCCESS side effects.
+<details>
+<summary>How does TWS learn about failure?</summary>
+If a critical step is FAILED, the job result is failure. Downstream jobs do not start.
 </details>
 
----
+## Blind check
 
-## 7. Blind check
-
-- [ ] Draw sync vs async flow
-- [ ] False SUCCESS + fix
-- [ ] Why no long txn over HTTP
-- [ ] Speak 2 min cold
+- [ ] Tell S-T-A-R without notes
+- [ ] Explain false SUCCESS and the fix in two sentences
+- [ ] Say why the DB transaction does not cover the HTTP call
 
 Next: [Spring Boot refactor](#/06-spring-refactor)

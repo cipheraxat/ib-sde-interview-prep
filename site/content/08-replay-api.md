@@ -1,78 +1,72 @@
 # Batch replay API
 
-**Resume:** Spring Boot **batch replay / step recovery** after TWS failures. Ops re-triggers failed payment-load steps **without manual DB edits**.
+**Resume:** Spring Boot API so ops can **re-run failed payment-load steps** after a TWS failure **without editing the database by hand**.
 
 ---
 
-## 1. Say this first (30s)
+## STAR — the story
 
-> Failed TWS steps must not be fixed with hand SQL. Replay API requeues FAILED steps with authZ and audit.
+### S — Situation (the problem)
 
----
+A failed step **blocks every TWS job after it**. At month-end that stops the night. The workaround was an engineer running **SQL by hand** to flip status or requeue a row. That has no permission check, no audit, and it is easy to mark a bad step SUCCESS or to send the same payment twice.
 
-## 2. Words
+### T — Task (your job)
 
-| Word | Meaning |
-|------|---------|
-| Replay | Controlled requeue of a failed step |
-| Manual DB edit | Direct SQL by human — no authZ/audit/invariants |
-| Audit log | who / what / when / why |
-| Idempotent replay | Second call does not double vendor side effect |
-| Fencing | Do not replay IN_PROGRESS without rules |
+Give operations a **safe button**: re-trigger only failed steps, with a log of who did it.
 
-> **ELI5:** Keycard door with log — not a screwdriver on the lock.
-
----
-
-## 3. How it works
+### A — Action (what you did)
 
 ```
-Ops → POST /ops/replay/{stepId} (+ auth)
-  → allow only FAILED (eligible)
-  → PENDING; attempt_count++; audit row
-  → worker runs again (timeouts; FAILED on non-2xx)
+Ops calls POST /ops/replay/{stepId}
+  → must be an authorized ops user
+  → step must be FAILED (not SUCCESS)
+  → set PENDING, add 1 to attempt_count
+  → write an audit row (who, when, which step)
+  → worker runs the file again
 ```
 
-| Rail | Rule |
-|------|------|
-| AuthZ | Ops role / service account only |
-| State guard | Reject SUCCESS; careful on IN_PROGRESS |
-| Attempts | Cap → MANUAL_REVIEW / escalate |
-| Vendor | Idempotency key / dedupe |
-| Audit | Immutable who/when/step/result |
-| Observability | metrics on replay rate + fail-after-replay |
+| Safety rail | Why |
+|-------------|-----|
+| Auth | Random callers cannot replay |
+| Only FAILED | Do not redo a step that already succeeded |
+| Attempt cap | After N tries, stop and escalate |
+| Idempotent vendor call | A second try must not double-post |
+| Audit row | Compliance can see who replayed what |
 
-**Why interviewers like it:** production ownership, ops empathy, audit, batch recovery (IB back-office relevant).
+> **ELI5:** A keycard door with a log. Not a screwdriver on the lock.
 
----
+### R — Result
 
-## 4. Say this (2 min)
-
-> Month-end FAILED steps blocked downstream TWS. Hand SQL was unsafe. Replay API: authorize, accept eligible FAILED only, requeue, bump attempts, audit. Shortens unblock time; keeps compliance trail; pairs with async worker failure semantics.
+Ops unblock a failed payment-load step without a DBA. The trail is in the audit table. Downstream TWS jobs can start again after a real SUCCESS.
 
 ---
 
-## 5. Top questions
+## Say the STAR in 60 seconds
 
-<details><summary>Duplicate vendor post?</summary>
-Idempotent vendor ops or dedupe keys; refuse unsafe replay.
-</details>
-<details><summary>Tests?</summary>
-Transition tests; deny SUCCESS replay; audit created; 403 without auth.
-</details>
-<details><summary>vs TWS restart?</summary>
-TWS restarts jobs; app replay encodes business eligibility TWS lacks.
-</details>
-<details><summary>Partial batch success?</summary>
-Replay only failed step_ids; do not reprocess SUCCESS files.
-</details>
+> A failed batch step blocked the rest of the night, and the fix was hand-edited SQL. That is unsafe and has no audit. I built a replay API. Ops can requeue a FAILED step only. The API checks permission, increments the attempt count, and writes who did it. The worker runs the file again. A successful step cannot be replayed by accident.
 
 ---
 
-## 6. Blind check
+## If they go deeper
 
-- [ ] Four safety rails
-- [ ] Why DB edits are bad
-- [ ] Speak 30s cold
+| vs TWS restart | App replay |
+|----------------|------------|
+| TWS can restart a job | The API knows business rules: only FAILED, attempt cap, vendor idempotency |
+
+<details>
+<summary>What if replay would duplicate a vendor post?</summary>
+Refuse the replay, or send the same idempotency key so the vendor treats it as the same request.
+</details>
+
+<details>
+<summary>How do you test it?</summary>
+SUCCESS replay returns an error. FAILED replay creates an audit row. No auth returns 403.
+</details>
+
+## Blind check
+
+- [ ] Tell S-T-A-R without notes
+- [ ] Name four safety rails
+- [ ] Say why hand SQL is the problem
 
 Next: [Jenkins, JAR, Veracode](#/09-cicd-jenkins)

@@ -1,85 +1,83 @@
 # RAG ops agent
 
-**Resume:** Prod **RAG/LLM** ops agent — **Python/LangChain/PgVector** over runbooks + **ServiceNow/Jira**. Retrieval-grounded. **HITL** — no unattended prod changes. **MTTR −40%** on pilot.
+**Resume:** Production **RAG** agent in **Python / LangChain / PgVector**. Runbooks + ServiceNow / Jira. **Human in the loop.** **MTTR about 40% lower** on the pilot.
 
-**CAUTION:** Never say LLM auto-fixes production.
-
----
-
-## 1. Say this first (30s)
-
-> LangChain RAG over runbooks in PgVector; drafts grounded next steps for ops via ServiceNow/Jira; human approves prod actions; MTTR ~−40% on pilot class.
+**CAUTION:** Do not say the model fixes production by itself.
 
 ---
 
-## 2. Words
+## STAR — the story
 
-| Word | Meaning | Trap |
-|------|---------|------|
-| LLM | Predicts text; can hallucinate | Not source of truth |
-| Embedding | Meaning as vector | Retrieval quality bottleneck |
-| RAG | Retrieve then generate | Better than stale fine-tune for runbooks |
-| Chunking | Split docs for embed/retrieve | Size vs context trade-off |
-| PgVector | Vectors in Postgres | Joins + metadata filters |
-| HITL | Human approves risky acts | Required line for IB |
-| MTTR | Mean time to resolve | Measure before/after pilot |
-| Prompt injection | Untrusted text steers tools | Delimit + allowlist tools |
+### S — Situation (the problem)
 
-> **ELI5:** Open the right runbook page first; then answer.
+Ops handled repeat incidents by **searching runbooks by hand**. Time to resolve was high. A plain LLM can **invent steps** that are not in the runbook. Ticket text is also **untrusted** — it can try to trick the model into calling tools (prompt injection). An agent that restarts payments with no human is not acceptable in a bank.
 
----
+### T — Task (your job)
 
-## 3. How it works
+Help ops find the right runbook steps faster, **without** unsupervised production changes.
+
+### A — Action (what you did)
+
+1. Split runbooks into chunks and store **embeddings in Postgres (PgVector)**.
+2. On an incident, **retrieve** the closest chunks first (RAG).
+3. The model drafts next steps **from those chunks** and can cite them.
+4. If retrieval is empty or weak, **do not guess**. Send it to a human.
+5. Tools (ServiceNow / Jira notes) are an **allowlist**. Ticket text is data, not instructions.
+6. A **human approves** any production action.
 
 ```
-ServiceNow incident
-  → embed/query → top-k runbook chunks (PgVector ± filters)
-  → LLM drafts suggestion + citations
-  → guarded tools (notes/Jira) 
-  → human approves before risky prod actions
+Incident → search runbook vectors → draft with citations
+        → human approves before a risky action
 ```
+
+> **ELI5:** The model must open the right page of the runbook before it answers. It does not answer from memory alone.
+
+### R — Result
+
+On the **pilot incident class**, mean time to resolve fell by about **40%**. Humans still approve production actions. The gain is faster context, not auto-remediation.
+
+Fill the sample size in [Personal facts](#/02a-personal-facts).
+
+---
+
+## Say the STAR in 60 seconds
+
+> Ops lost time hunting runbooks, and a free-form model would invent steps or take ticket text as orders. I built a RAG assistant: runbooks live as vectors in Postgres, the model answers from retrieved chunks, and a human approves production actions. If nothing relevant is retrieved, it does not guess. On the pilot set, MTTR fell about 40%.
+
+---
+
+## If they go deeper
+
+| Word | One line |
+|------|----------|
+| RAG | Retrieve documents, then generate |
+| Embedding | Numbers that represent meaning |
+| PgVector | Vector search inside Postgres |
+| HITL | Human in the loop |
+| MTTR | Average time to resolve |
+| Prompt injection | Untrusted text tries to control tools |
 
 | Control | Rule |
 |---------|------|
-| Grounding | Prefer retrieved steps; cite chunk ids |
-| Empty retrieval | No guess — escalate human |
-| Untrusted ticket text | Delimit as data; not instructions |
-| Tools | Allowlist per step; no broad shell |
-| Eval | Golden questions; block regressions in CI if you have them |
-| PII | Redact before model when needed |
+| Grounding | Cite the chunk |
+| Empty search | Escalate. Do not invent |
+| Tools | Allowlist only |
+| PII | Redact before the model when needed |
 
-**MTTR:** same incident class, before vs after, HITL still on. Fill sample size in Personal facts.
-
----
-
-## 4. Say this (2 min)
-
-> Ops lost time searching runbooks. RAG assistant: chunk+embed runbooks into PgVector; retrieve; draft grounded suggestion; optional ticket updates; human in loop for prod. Pilot MTTR −~40%. Value = faster context + consistency, not unsupervised remediation. Injection defenses: delimit ticket text, allowlist tools, fail closed on weak retrieval.
-
----
-
-## 5. Top questions
-
-<details><summary>Hallucinations?</summary>
-Retrieve first; citations; refuse weak retrieval; HITL; eval set.
-</details>
-<details><summary>RAG vs fine-tune?</summary>
-Runbooks change; RAG stays fresh and citable.
-</details>
-<details><summary>Why Postgres vectors?</summary>
-One ops model, SQL filters, ACID metadata, less new infra.
-</details>
-<details><summary>What must never be automated?</summary>
-Destructive prod changes / unattended remediations without approval.
+<details>
+<summary>Why RAG instead of fine-tuning?</summary>
+Runbooks change. Retrieval stays current and you can show the page you used.
 </details>
 
----
+<details>
+<summary>Why Postgres for vectors?</summary>
+One database ops already know. You can filter by service or severity in SQL.
+</details>
 
-## 6. Blind check
+## Blind check
 
-- [ ] Draw retrieve → generate → HITL
-- [ ] HITL safety one-liner
-- [ ] Injection defense two bullets
-- [ ] Speak 30s cold
+- [ ] Tell S-T-A-R without notes
+- [ ] Draw retrieve → draft → human
+- [ ] Say the sentence: the model does not fix production alone
 
 Next: [Samsung, OSS, CodeReviewer](#/11-samsung-oss-project)

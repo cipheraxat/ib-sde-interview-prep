@@ -1,74 +1,66 @@
 # Jenkins, fat JAR, Veracode
 
-**Resume:** Executable **fat JAR** + **Jenkins** promote test→staging→prod. Release cycle **−25%**. **Veracode** zero critical.
+**Resume:** Executable **fat JAR**. **Jenkins** promotes test → staging → production. Release cycle **about 25% shorter**. **Veracode** stayed at **zero critical** findings.
 
 ---
 
-## 1. Say this first (30s)
+## STAR — the story
 
-> Fat JAR + Jenkins build/test/scan/promote across envs. ~25% faster release cycle; Veracode criticals stayed at zero.
+### S — Situation (the problem)
 
----
+Shipping the integration service took too long and varied by person. Builds were manual. The “same” binary was not always the same across test and production. Security review happened late. A bad package could reach prod before anyone scanned it.
 
-## 2. Words
+### T — Task (your job)
 
-| Word | Meaning |
-|------|---------|
-| Fat/uber JAR | Code + deps (+ embedded server) one runnable |
-| Pipeline | Automated stages same every commit |
-| Promote | Same artifact → next env |
-| Veracode / SAST | Static scan for vulns in CI |
-| Smoke test | Tiny prod-like check after deploy |
-| Rollback | Prior JAR / prior release |
+Make **one artifact** and **one pipeline** so every change is built, tested, scanned, and promoted the same way. Cut the time from commit to production for **this service**.
 
----
+### A — Action (what you did)
 
-## 3. How it works
+1. Package Spring Boot as a **fat JAR** (your code + libraries + server in one file: `java -jar ...`).
+2. Jenkins stages, in order:
 
 ```
-Checkout → mvn test/package → Veracode gate
-  → fat JAR → deploy Test → smoke → approve
-  → Staging → Prod
+Checkout → Maven test and package → Veracode scan
+  → deploy Test → smoke check → approve
+  → Staging → Production
 ```
 
-**Envs:** Dev → Test/SIT → Staging → Prod.  
-**Secrets:** Jenkins credentials/vault — never Git.  
-**Config:** Spring profiles / external config; not baked secrets in JAR.  
-**25%:** define as commit→prod time for **your** service (fill evidence in Personal facts).
+3. **Same JAR** moves forward. You do not rebuild a different binary for prod.
+4. Secrets stay in Jenkins or a vault. They are **not** in Git and not baked into the JAR.
+5. Config uses Spring profiles. Rollback = the **previous JAR**.
 
-| Veracode finds | Examples |
-|----------------|----------|
-| Injection patterns, bad crypto, hardcoded secrets | Gate fails on critical |
+**Veracode** is static security scanning (injection, bad crypto, hardcoded secrets). A **critical** finding blocks the pipeline.
 
----
+### R — Result
 
-## 4. Say this (2 min)
-
-> Manual packaging caused delay and drift. Standardized Spring Boot fat JAR + Jenkins: every change gets build, tests, Veracode, then promote one artifact. Cut cycle time ~25%; kept critical findings at zero; rollback = previous artifact.
+Release cycle time for the service fell by about **25%**. Critical Veracode findings stayed at **zero** because the gate runs before promotion.
 
 ---
 
-## 5. Top questions
+## Say the STAR in 60 seconds
 
-<details><summary>Prevent bad prod?</summary>
-Tests + Veracode + promotion gates + smoke + rollback plan.
-</details>
-<details><summary>Build tool?</summary>
-Maven multi-module; `test`/`package`; modules mirror api/core/persistence.
-</details>
-<details><summary>Config by env?</summary>
-Profiles + externalized props; secrets injected at runtime.
-</details>
-<details><summary>Zero critical — how kept?</summary>
-CI gate blocks; fix before merge; periodic scans on main.
-</details>
+> Releases were slow and inconsistent, and security checks were late. I package the service as one fat JAR and run it through Jenkins: build, test, Veracode, then the same file goes to test, staging, and production. Secrets are not in the JAR. Rollback is the previous JAR. Cycle time dropped about 25%, and we kept critical scan findings at zero.
 
 ---
 
-## 6. Blind check
+## If they go deeper
 
-- [ ] Pipeline stages in order
-- [ ] Fat JAR one-liner
-- [ ] Speak 30s cold
+| Env | Use |
+|-----|-----|
+| Dev | Local / developer |
+| Test or SIT | Integrated test |
+| Staging | Prod-like |
+| Prod | Real traffic |
+
+<details>
+<summary>How do you stop a bad prod deploy?</summary>
+Tests fail the build. Veracode fails the build. Smoke checks run after deploy. Rollback is the last good JAR.
+</details>
+
+## Blind check
+
+- [ ] Tell S-T-A-R without notes
+- [ ] List pipeline stages in order
+- [ ] Say what a fat JAR is in one sentence
 
 Next: [RAG ops agent](#/10-rag-ops-agent)
