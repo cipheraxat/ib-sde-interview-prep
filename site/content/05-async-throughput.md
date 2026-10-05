@@ -8,9 +8,18 @@
 
 ### S — Situation (what the world looked like)
 
-The night jobs already called the vendor. The problem was **how** they called. The job picked up a record, called the vendor, and **waited** until that call finished before it touched the next record. If each call takes a fraction of a second and you have a large file, the clock runs out. End-of-day and month-end were the painful windows, because that is when the files are biggest.
+Every night the bank runs a batch of payment files. That batch has a finish time. Morning operations, and the next job in the chain, need the result before people start the business day. If the batch is still running at that time, the night is already a failure even when every single call would have worked eventually.
 
-There was a worse bug than slowness. Sometimes the call **timed out**. The code did not know if the vendor had done the work. In a bad version of this, the step was still marked **SUCCESS**. The next job in the IBM TWS chain believed the work was done and moved on. That is called a **false success**: the scheduler is happy, the data is not.
+The old code did the work **one file at a time**, and it **stood still** while it waited:
+
+1. Pick up file 1.
+2. Call the vendor.
+3. Wait until that call comes back. Do nothing else.
+4. Only then pick up file 2.
+
+The waiting adds up. Picture a small example, not a resume number: 2,000 files, and each vendor call takes about 2 seconds. One worker needs about 4,000 seconds, which is a bit more than an hour, and during that whole hour it is mostly waiting on the network. A real end-of-day or month-end file is much bigger than a normal night, so the same one-by-one wait pushes the job past the time morning needs it.
+
+There was a second problem, and it was worse than being slow. Sometimes the vendor call **timed out**: your service stopped waiting, but it did not know whether the vendor had finished the work. The old code could still save that step as **SUCCESS**. The next job in IBM TWS believed the step was done and moved on. The scheduler looked happy. The payment data was not. That is a **false success**.
 
 ### T — Task (what you were asked to do)
 
@@ -40,7 +49,7 @@ Night job starts
 
 ### R — Result (what changed)
 
-On a **comparable** volume (same kind of night, same input size), throughput rose by about **60%**. That means more records per hour, or less wall-clock time, not a made-up percentage. The important quality result is separate from speed: a timeout is **FAILED**, so the next job does not run on a lie.
+On a **comparable** volume (same kind of night, same input size), throughput rose by about **60%**. The same files finished sooner, so the batch was done before morning needed it. The important quality result is separate from speed: a timeout is **FAILED**, so the next job does not run on a lie.
 
 Write your real before-and-after numbers in [Personal facts](#/02a-personal-facts) before the interview.
 
@@ -48,7 +57,7 @@ Write your real before-and-after numbers in [Personal facts](#/02a-personal-fact
 
 ## Say it in about 60 seconds
 
-> The night job called the vendor and waited for every call before the next one, so big files missed the window. Worse, a timeout could be stored as success, and the next scheduled job would trust that. I changed it to a small pool of workers, one file each, with the status saved in the database. If the call times out or the vendor does not return success, the step is FAILED. On the same volume, throughput went up about 60 percent, and failed files are replayed through an API instead of a manual database edit.
+> Every night we had to finish a batch of payment files before morning. The old job called the vendor one file at a time and waited for each call to come back before it started the next file. On a big end-of-day file, that waiting made the job still be running when morning needed the result. Worse, if a call timed out, the step could be saved as success, and the next scheduled job would trust that. I changed it to a small pool of workers, one file each, with the status saved in the database. If the call times out or the vendor does not return success, the step is FAILED. On the same volume, throughput went up about 60 percent, and failed files are replayed through an API instead of a manual database edit.
 
 ---
 
