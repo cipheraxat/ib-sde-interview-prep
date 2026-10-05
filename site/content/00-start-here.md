@@ -33,6 +33,25 @@ If you don’t clarify, the interviewer may think you claimed trading-platform e
 
 **Rule:** Don’t skim every lesson the night before. Pick **2 Barclays bullets** you can teach on a whiteboard (recommended: **Tokenization** + **Async**). Know the others at “30-second pitch” level.
 
+## One night
+
+Say this before you open a deep dive. Every Barclays page hangs on it.
+
+> Overnight, IBM TWS starts a job. My Spring service calls the vendor and writes SUCCESS or FAILED in MySQL. If the step succeeded, Kafka tells audit and reporting. If it failed, operations uses the replay API. Jenkins is how that service was built and released. When on-call is stuck, the RAG assistant suggests the runbook. A person still does the fix.
+
+The timeout rule lives on the Async page. Migration, Spring, and Replay point back to it. Say it once.
+
+**Read in this order** so each page adds one piece of that night. The sidebar stays in resume order.
+
+1. [Async](#/05-async-throughput) — the batch was slow, and a timeout could be stored as success
+2. [Spring](#/06-spring-refactor) — the code shape that lets a test prove the timeout rule
+3. [Replay](#/08-replay-api) — a person retries the FAILED row
+4. [Kafka](#/07-kafka) — audit and reporting hear the outcome
+5. [Unix to SaaS](#/03-migration-unix-saas) — that service sits between the scheduler and the vendor
+6. [PII](#/04-pii-tokenization) — how customer data is allowed to reach the vendor
+7. [Jenkins](#/09-cicd-jenkins) — how the service was built, scanned, and released
+8. [RAG](#/10-rag-ops-agent) — how on-call finds the runbook after the night fails
+
 **Done means blind:** draw diagram, speak 2 minutes, answer 3 hard follow-ups — then Mark done.
 
 ## How each deep dive page works

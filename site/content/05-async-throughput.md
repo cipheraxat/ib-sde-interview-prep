@@ -2,6 +2,8 @@
 
 **On your resume:** Batch work got about **60% faster**. You stopped calling the vendor one-by-one inside the night job. Workers handle **one file each**. The database stores whether the step succeeded. A timeout is a **failure**, not a success.
 
+**In the night:** This is the bug inside the middle service. The batch was slow, and a timeout could be stored as success. Say this rule here. The other pages point back to it.
+
 ---
 
 ## STAR — the story
@@ -31,7 +33,7 @@ You stopped doing the vendor calls inside one long waiting loop.
 
 1. The scheduler still starts the job. That part did not go away.
 2. The job loads the files (or work items) and hands them to a **fixed pool of workers**. “Fixed” matters: if you start unlimited threads, you can knock over the vendor or your own database.
-3. **One file is one task.** If one file is bad, it does not scramble the memory of another file.
+3. **One file is one task.** One bad file becomes FAILED. The other files in the pool continue.
 4. Before the call, the database row says `IN_PROGRESS`. After a real success it says `SUCCESS`. After a timeout or a non-success HTTP code it says `FAILED`.
 5. The HTTP client has a **connect timeout** and a **read timeout**. You do not wait forever.
 6. You do **not** hold a database transaction open while you wait on the vendor. That would pin a database connection for the whole slow call. You save state, call the vendor, then save the outcome.

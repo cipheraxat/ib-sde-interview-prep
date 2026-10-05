@@ -2,13 +2,15 @@
 
 **On your resume:** You built an API so operations can **run a failed batch step again** without someone opening the database and editing rows by hand.
 
+**In the night:** When the row says FAILED, this is how a person runs that step again. Those FAILED rows are the timeout rule from the [async story](#/05-async-throughput).
+
 ---
 
 ## STAR — the story
 
 ### S — Situation (what the world looked like)
 
-Night jobs fail. A file is late, the vendor times out, or a mapping is wrong. After the async change, those steps sit in the database as **FAILED**. That is correct. The next problem is **how you fix them**.
+Night jobs fail. A file is late, the vendor times out, or a mapping is wrong. After the async change, those steps sit in the database as **FAILED**. That is the same rule as the [async story](#/05-async-throughput), and it is the correct outcome. The next problem is **how you fix them**.
 
 The old shortcut was a person with database access running an `UPDATE` to flip the status back, or re-running a mystery script. That is dangerous. There is no record of who did it. There is no check that the step is actually allowed to run again. Two people can “fix” the same payment and post it twice. And the next night, nobody can explain what changed.
 
@@ -22,7 +24,7 @@ The API is small on purpose.
 
 1. Someone calls something like `POST /replay` with the step id or the file id, and a reason.
 2. The service loads the row. It only continues if the status is **FAILED** (or another status you explicitly allow). A step that is already **SUCCESS** is refused. You do not replay a payment that already went through.
-3. It checks the business rule: is this kind of step safe to run twice? If running it twice would create a second payment, the API refuses unless the vendor call itself is idempotent.
+3. It checks whether a second run is safe. If a second run would create a second payment, the API refuses. If the vendor treats a repeat of the same payment as the same payment, the API allows the replay.
 4. It sets the row back to a runnable state and runs the **same code path** the night job uses. There is not a second, secret “ops version” of the logic.
 5. It writes an **audit row**: who asked, when, which step, and why. That replaces the invisible SQL update.
 6. If the replay fails again, the status goes back to FAILED with the new error. It does not get forced to SUCCESS.

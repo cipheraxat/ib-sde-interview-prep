@@ -4,6 +4,8 @@
 
 **Say this carefully:** You designed the **integration and the proof**. You did **not** build the bank’s tokenization product (DPaaS) itself.
 
+**In the night:** Same platform as the Unix-to-SaaS service. This page is how customer data is allowed to reach that vendor.
+
 ---
 
 ## STAR — the story
@@ -18,7 +20,7 @@ There was a second problem. People like to say “the night job finished, so we 
 
 ### T — Task (what you were asked to do)
 
-Design the path, both the big picture (HLD) and the details (LLD):
+Design the path from both ends. The big picture is where the data sits (people call this HLD). The details are the states, the SQL proof, the resume, and the switch (people call this LLD):
 
 - Vendor stores tokens, not plaintext.
 - You can **prove** the accounts in scope really have a token.
@@ -64,7 +66,7 @@ That query is the list of accounts that are **still wrong**. Cutover is allowed 
 |-----------------|-------------|-----|
 | Timeout, vendor 5xx, network blip | Retry with a wait that gets longer | These often clear by themselves |
 | Bad mapping or bad data | Stop automatic retry. A person reviews it | Retrying will fail the same way |
-| Vendor is down for everyone | Pause the wave and alert | Do not hammer a dead system |
+| Vendor is down for everyone | Pause the wave and alert. A wave is one chunk of accounts you process together | Do not hammer a dead system |
 | Job dies after 40,000 of 100,000 | Next run continues from the rows still pending or failed | Do not redo the 40,000 that already worked |
 
 You send a stable key (account + wave) so a retry does not create a second conflicting token. You work in chunks of a few hundred to a few thousand accounts so one failure does not wreck the whole night.
@@ -73,16 +75,18 @@ You send a stable key (account + wave) so a retry does not create a second confl
 
 You never flip all 100,000 accounts in one irreversible moment.
 
+A **setting** decides which path a group of accounts uses. That setting is the routing control. A **wave** is one chunk of accounts. A **soak** is several quiet days on the new path while you keep watching the mismatch query.
+
 | Phase | In plain words | You move on when |
 |-------|----------------|------------------|
-| Ready | Design is signed. Recon and alerts exist. Someone owns rollback | You can run a small wave safely |
-| Parallel | New path runs, but the **old path is still the one that counts** | Recon looks clean for several business days |
-| Backfill | You tokenize the remaining accounts in chunks | Confirmed accounts with an active vendor token hit the target |
-| Soft flip | A **small group** of accounts starts using the new path for real | That group survives a full business cycle, including a heavy day |
-| Hard flip | The rest of the traffic moves. You still keep the old path for a while | Proof stays green and security signs off |
-| Remove the old path | Only after a soak period | Runbooks describe the new world |
+| Ready | Design is signed. The mismatch query and alerts exist. Someone owns rollback | You can run a small wave safely |
+| Parallel | New path runs, but the **old path is still the one that counts** | The mismatch query returns no rows for several business days |
+| Backfill | You tokenize the remaining accounts one wave at a time | Confirmed accounts with an active vendor token reach the target |
+| Soft flip | A **small group** of accounts starts using the new path for real. The setting chooses that group | That group gets through a full business cycle, including a heavy day |
+| Hard flip | The rest of the accounts move to the new path. You still keep the old path for a while | The mismatch query stays empty and security signs off |
+| Remove the old path | Only after a soak | Runbooks describe the new world |
 
-If proof turns red, you **flip the routing back**. That is the rollback. You do not plan “restore yesterday’s entire database” as the first answer.
+If the mismatch query starts returning rows, you point the setting back at the old path. That is the rollback. The database stays as it is. Restoring yesterday’s entire database is not the first answer.
 
 ### R — Result (what changed)
 
@@ -92,7 +96,7 @@ More than **100,000 accounts** were confirmed by the recon join (vendor shows an
 
 ## Say it in about 60 seconds
 
-> The vendor system sits on AWS, and it is not allowed to store raw personal data. I designed the path: we replace sensitive fields with tokens on our side, send only encrypted data across, and the vendor stores the token. Proof is not “the job finished.” Proof is a SQL check that every expected account has an active token at the vendor. If a transfer dies halfway, we continue from the accounts that are still pending. We switched in phases while the old path stayed available, and rollback is turning the routing flag back.
+> The vendor system sits on AWS, and it is not allowed to store raw personal data. I designed the path: we replace sensitive fields with tokens on our side, send only encrypted data across, and the vendor stores the token. Proof is not “the job finished.” Proof is a SQL check that every expected account has an active token at the vendor. If a transfer dies halfway, we continue from the accounts that are still pending. We switched in phases. A setting decides which path a group of accounts uses. The old path stayed available. Rollback means that setting points at the old path again. The database stays as it is.
 
 ---
 
@@ -105,6 +109,9 @@ More than **100,000 accounts** were confirmed by the recon join (vendor shows an
 | DPaaS | The bank’s tokenization service. You call it. You did not build the vault |
 | DTU | The approved encrypted way to send data to the cloud |
 | Recon | Compare what you expected with what the vendor actually has |
+| Wave | One chunk of accounts you process together |
+| Soak | Several quiet days on the new path while the mismatch query stays empty |
+| Routing setting | The control that decides which path a group of accounts uses |
 
 <details>
 <summary>Why not only encrypt the fields in the vendor database?</summary>

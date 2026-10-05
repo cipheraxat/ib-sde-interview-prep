@@ -4,6 +4,8 @@
 
 **Say this carefully:** The model **suggests**. It does **not** fix production by itself.
 
+**In the night:** After that night fails, this is what helps on-call find the old write-up. A person still does the fix.
+
 ---
 
 ## STAR — the story
@@ -23,7 +25,7 @@ Shorten the time from “ticket opened” to “engineer knows the likely next s
 This pattern is called **RAG**: retrieval-augmented generation. In plain words, the model is not asked to remember the bank. You **look up** the relevant notes first, then the model writes an answer **from those notes**.
 
 1. Runbooks and resolved tickets are split into chunks and stored as vectors in **Postgres with PgVector**. A vector is a numeric fingerprint of the text so “vendor timeout on payment sync” can find older write-ups that use different words.
-2. A new ticket comes in. The app embeds the ticket text and searches for the closest chunks.
+2. A new ticket comes in. The app turns the ticket text into the same kind of numeric fingerprint and searches for the closest chunks.
 3. **LangChain** sends the model only those chunks plus the question: what is the likely cause, and what should the human check next?
 4. The answer comes back as a **suggestion** on the ticket: possible cause, the runbook section, and the checks (scheduler log, your status row, vendor status).
 5. A **person** reads it. If they agree, they follow the runbook or call the replay API. The model never gets a button that restarts jobs or edits the database.

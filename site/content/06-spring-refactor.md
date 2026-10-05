@@ -2,13 +2,15 @@
 
 **On your resume:** You took an older plain-Java integration program and turned it into a **Maven multi-module Spring Boot** service with **JPA** for the database, plus **unit tests** (JUnit and Mockito) and code review.
 
+**In the night:** This is how that service’s code was structured, so a test can prove the timeout rule from the [async story](#/05-async-throughput).
+
 ---
 
 ## STAR — the story
 
 ### S — Situation (what the world looked like)
 
-The integration logic existed, but it was **plain Java**: a program that started from a `main` method, objects created with `new` all over the place, configuration copied between environments, and SQL strings mixed into the business rules. There were few tests.
+This is the same timeout bug from the [async story](#/05-async-throughput), seen from inside the code. The integration logic existed, but it was **plain Java**: a program that started from a `main` method, objects created with `new` all over the place, configuration copied between environments, and SQL strings mixed into the business rules. There were few tests.
 
 That matters because the dangerous bug in this area is subtle. A vendor call times out, and the code still records success. In a messy codebase you cannot easily **prove** that a timeout becomes FAILED before you ship. Every change felt risky. People were afraid to touch the failure path.
 
@@ -52,11 +54,13 @@ The integration behavior stayed the same for the business, but changes became sa
 
 ## If they ask more
 
+The spoken story is the timeout test with a fake vendor client. Answer the rows below only if they ask.
+
 | They say | You answer in plain words |
 |----------|---------------------------|
 | What is dependency injection? | The framework hands the service the objects it needs. Tests can hand it a fake. |
 | What is a transaction trap? | If you open a database transaction and then wait 10 seconds on HTTP, you occupy a connection the whole time. Save, call, then save the result. |
-| What is N+1? | You load 100 parent rows, then the code quietly runs one extra query per row. Fix it by loading the related data in one query. |
+| Only if they ask: what is N+1? | You load 100 parent rows, then the code quietly runs one extra query per row. Fix it by loading the related data in one query. This was not the story of the refactor. |
 
 ## Blind check
 

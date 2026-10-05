@@ -4,6 +4,8 @@
 
 **Say this early:** On your resume, TWS means **IBM Workload Scheduler** (the tool that starts overnight jobs). It does **not** mean Interactive Brokers’ Trader Workstation.
 
+**In the night:** This is the service in the middle. The scheduler starts it. It calls the vendor and writes the result. The timeout rule is the one on [Async and throughput](#/05-async-throughput). Say that rule once.
+
 ---
 
 ## STAR — the story
@@ -16,7 +18,7 @@ The bank decided to stop running that old product itself and use a **vendor’s 
 
 ### T — Task (what you were asked to do)
 
-Your job was the **middle layer**, not the whole bank migration. You built **Java / Spring Boot services** that sit between the scheduler and the vendor. IBM TWS starts a job. Your service does the real work: read the input, call the vendor’s REST API, and **save the result in MySQL** so everyone can see success or failure later. The program covered **80+ business processes**, **5,000+ transactions a day**, and **100,000+ accounts**. You contributed to that program. You did not migrate the entire bank by yourself.
+Own the **middle layer**. The scheduler still had to start each overnight step. Something had to call the vendor, and something had to record whether that step really finished. The program covered **80+ business processes**, **5,000+ transactions a day**, and **100,000+ accounts**. You were one engineer on that program. The bank migration was a larger effort around you.
 
 ### A — Action (what you actually built)
 
@@ -27,8 +29,8 @@ Picture one nightly job, “sync payment status”:
 3. Your service reads the work: rows waiting in a table, or a file that landed on disk.
 4. For each item it checks the data, maps the bank’s ids to the vendor’s ids, and calls the vendor’s REST API.
 5. It **writes the outcome in MySQL**: SUCCESS or FAILED, plus the vendor’s reference id and the time.
-6. It tells TWS “this step is good” only when the acceptance rules pass. If not, the job fails and **later jobs stay blocked**. That is safer than pretending success.
-7. While the new path was new, the **old Unix path and the new path ran together**. You compared the results. Only after the compare looked right did the new path become the one that counts.
+6. It tells TWS the step is good only when the checks pass: the vendor returned success, and the MySQL row says SUCCESS. Those checks are the acceptance rules. If they fail, the job fails and **later jobs stay blocked**. A timeout is FAILED. That is the same rule as the [async story](#/05-async-throughput).
+7. For several nights the **old Unix job and the new service both ran**. You compared status and counts between them. The new path became the one that counts only after those matched.
 8. If the new path misbehaved, rollback was simple in concept: point TWS back at the **old job definitions**.
 
 ```
@@ -56,7 +58,7 @@ The integration services run in production for that scope. Each step has a row i
 
 ## Say it in about 60 seconds
 
-> Payment operations used to be Unix scripts and night jobs. The bank moved the product to a vendor system on AWS, but we still had to call that vendor and know if each step really finished. I built Spring Boot services that IBM’s job scheduler starts. They call the vendor’s REST API and save SUCCESS or FAILED in MySQL. That covers 80-plus workflows, 5,000-plus transactions a day, and 100,000-plus accounts. We ran the old path and the new path together and compared them before we trusted the new one. If we needed to go back, we pointed the scheduler at the old jobs again.
+> Payment operations used to be Unix scripts and night jobs. The bank moved the product to a vendor system on AWS, but we still had to call that vendor and know if each step really finished. I built Spring Boot services that IBM’s job scheduler starts. They call the vendor’s REST API and save SUCCESS or FAILED in MySQL. That covers 80-plus workflows, 5,000-plus transactions a day, and 100,000-plus accounts. For several nights the old job and the new service both ran, and we compared status and counts before we trusted the new one. If we needed to go back, we pointed the scheduler at the old jobs again. A timeout is FAILED. That rule is the same one I use on the async story.
 
 ---
 

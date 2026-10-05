@@ -2,6 +2,8 @@
 
 **On your resume:** You used **Kafka** to publish payment and account events so audit and reporting systems can react. You also made the **consumer safe to run the same message twice**.
 
+**In the night:** After the service saves SUCCESS or FAILED, this is how audit and reporting hear about it. The batch does not wait for them.
+
 ---
 
 ## STAR — the story
@@ -10,23 +12,23 @@
 
 When a payment step finished, more than one team needed to know. Audit needed a record. Reporting needed numbers. Sometimes another system needed to update an account view. The old habit is to call each of those systems **directly** from the integration service, one HTTP call after another.
 
-That couples you to them. If reporting is slow, your night job waits. If you add a new consumer next year, you have to change the payment code again. And if the network drops a message, nobody is sure who missed it.
+That ties your night job to their uptime. If reporting is slow, your night job waits. If you add a new reader next year, you have to change the payment code again. And if the network drops a message, nobody is sure who missed it.
 
 Kafka is a **log of events**. Your service writes “this payment step finished.” Other teams read that log at their own speed. Your job does not wait for their reports to finish.
 
 ### T — Task (what you were asked to do)
 
-Publish payment and account events for audit and reporting, and make sure a consumer that sees the **same event twice** does not write the audit row twice or double-count the report.
+After a payment step is saved, audit and reporting need the news without making the night job wait on them. A repeat of the same news must not create a second audit row or double-count a report.
 
 ### A — Action (what you actually built)
 
 1. After your service **knows** the step outcome (and has saved it), it publishes an event. The message says what happened: payment id, account, status, business date, and a stable event id.
-2. The **key** is something stable, such as the payment id, so events for the same payment stay in order on one partition.
+2. The **key** is a stable id, such as the payment id. Events for the same payment stay together and stay in order. That ordered group is called a partition. In the interview, “the same payment stays in order” is enough unless they ask for the word.
 3. Audit and reporting are **separate consumers**. They do not sit inside your night job.
 4. Kafka in this design is **at least once**. That means a consumer might see a message twice after a crash or a retry. That is normal. You do not tell the interviewer “we have exactly-once everywhere.”
-5. The consumer is **idempotent**. Before it inserts, it checks the event id. If that id is already stored, it skips. The second copy does no harm.
-6. If the database insert works but the “I finished this message” step fails, the message comes back. The unique event id saves you.
-7. If the message itself is bad (wrong shape, unknown account), you do not retry forever. You send it to a **dead-letter** path and alert a person. Retry is for temporary failures (database blip), not for garbage data.
+5. The consumer checks the event id before it inserts. If that id is already stored, it skips. The second copy does no harm. That property is called idempotent: doing it twice has the same effect as doing it once.
+6. The consumer can save the audit row and then crash before it tells Kafka it is done. Kafka sends the message again. The saved event id makes the second copy a no-op.
+7. If the message itself is bad (wrong shape, unknown account), you do not retry forever. You put it on a side path and alert a person. That side path is a dead-letter queue. Retry is for temporary failures (database blip), not for garbage data.
 
 ```
 Your service saves SUCCESS or FAILED
@@ -56,7 +58,7 @@ Audit and reporting can follow payment and account changes without your batch wa
 | Exactly-once? | Delivery is at least once. The consumer makes the effect happen once, using a unique event id. |
 | What is the key? | A stable id such as payment id, so one payment’s events stay ordered. |
 | What is in the message? | Event id, payment or account id, status, business date, time. Not raw personal data. |
-| Producer fails after the database commit? | The row says what happened. A replay or an outbox-style republish can send the event again. The consumer still ignores duplicates. |
+| Only if they ask: producer fails after the database commit? | The MySQL row already says what happened. You can publish the event again from that row. The consumer still ignores a duplicate event id. Some teams keep a separate outbox table for “not yet published”: one row per event, a published flag, and a job that sends rows still marked unpublished. Draw that table before you say the word outbox. |
 
 ## Blind check
 
