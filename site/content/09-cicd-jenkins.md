@@ -46,10 +46,43 @@ Releases follow one pipeline. The cycle got about **25% shorter** because manual
 | What if Veracode is slow? | The release waits. A critical finding is a stop, not a warning you click past. |
 | What is the 25% measuring? | Time from “ready to release” to “out,” after the manual steps were removed. Say your real baseline if they ask for dates. |
 
+## If they ask for code
+
+The pipeline is the checklist, written down. A failing test or a critical scan stops the run. The artifact that moves forward is the same JAR the test stage built.
+
+```groovy
+pipeline {
+    agent any
+    stages {
+        stage('Test') {
+            steps { sh 'mvn -B test' } // includes timeoutIsFailed
+        }
+        stage('Package') {
+            steps { sh 'mvn -B -DskipTests package' } // one runnable JAR
+        }
+        stage('Scan') {
+            steps { sh 'veracode scan target/*.jar' } // critical finding fails this stage
+        }
+    }
+    post {
+        success { archiveArtifacts artifacts: 'target/*.jar' }
+    }
+}
+```
+
+`mvn -B` means batch mode: no “are you sure?” prompt. Config for each environment stays outside the JAR, so you promote this file instead of rebuilding it on a laptop.
+
+If they ask what the server runs:
+
+```bash
+java -jar payment-integration.jar --spring.profiles.active=prod
+```
+
 ## Blind check
 
 - [ ] Explain what was painful before the pipeline
 - [ ] Name the order: build, test, scan, then the artifact can move
 - [ ] Say what a critical finding does
+- [ ] Write the pipeline stages in order: test, package, scan
 
 Next: [RAG operations assistant](#/10-rag-ops-agent)

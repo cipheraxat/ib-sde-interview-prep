@@ -78,10 +78,44 @@ The integration services run in production for that scope. Each step has a row i
 Scripts were hard to test and easy to get subtly wrong. A Spring Boot service has clear inputs, a database row for every step, health checks, and tests you can run before production.
 </details>
 
+## If they ask for code
+
+Write this shape. The class names are the idea. Say the rule while you write: a timeout is FAILED, and the scheduler only moves on after SUCCESS.
+
+```java
+public StepResult sync(String stepId) {
+    stepRepo.mark(stepId, Status.IN_PROGRESS);
+    try {
+        VendorResponse response = vendorClient.sync(stepId); // connect + read timeouts live on the client
+        if (response.statusCode() >= 200 && response.statusCode() < 300) {
+            stepRepo.markSuccess(stepId, response.vendorRef());
+            return StepResult.SUCCESS; // TWS treats exit 0 as "this step is good"
+        }
+        stepRepo.markFailed(stepId, "vendor HTTP " + response.statusCode());
+        return StepResult.FAILED;      // later jobs stay blocked
+    } catch (ResourceAccessException timedOut) {
+        stepRepo.markFailed(stepId, "timeout");
+        return StepResult.FAILED;      // stopping the wait is not success
+    }
+}
+```
+
+If they ask how you compared the old Unix job and the new service:
+
+```sql
+SELECT source, status, COUNT(*) AS n
+FROM step_result
+WHERE business_date = :runDate
+GROUP BY source, status;
+```
+
+`source` is `UNIX` or `SAAS`. You trusted the new path when the counts and statuses matched.
+
 ## Blind check
 
 - [ ] Tell the story: old Unix, vendor on AWS, your middle layer, compare before cutover
 - [ ] Explain why a timeout must not be called success
 - [ ] Say what TWS means on your resume
+- [ ] Write the `sync` method: timeout returns FAILED, and the compare query groups by source and status
 
 Next: [PII and tokenization](#/04-pii-tokenization)

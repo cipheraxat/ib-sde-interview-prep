@@ -62,10 +62,41 @@ Write the sample size and how you measured the 40% in [Personal facts](#/02a-per
 | What data is in the index? | Operational notes and runbooks. Not a dump of customer personal data into the prompt. |
 | What is a vector here? | A list of numbers that represents the meaning of a paragraph, so search is by similarity, not only exact words. |
 
+## If they ask for code
+
+Search first. Then ask the model to write from those pages only. If the search returns nothing, say you do not know.
+
+```python
+def suggest(ticket_text: str) -> str:
+    query_vec = embed(ticket_text)          # same numeric fingerprint as the stored chunks
+    chunks = search_pgvector(query_vec, k=5)  # runbooks and resolved tickets
+    if not chunks:
+        return "No matching runbook. I do not know the next step."
+
+    context = "\n\n".join(chunk.text for chunk in chunks)
+    return model.invoke(
+        "Use only the context below. Suggest a likely cause and the next check. "
+        "Do not claim any job was restarted.\n\n"
+        f"Context:\n{context}\n\nTicket:\n{ticket_text}"
+    )
+```
+
+The search is the part you can defend. A typical PgVector lookup is “nearest fingerprints,” limited to a few chunks:
+
+```sql
+SELECT text, 1 - (embedding <=> :query_vec) AS similarity
+FROM runbook_chunk
+ORDER BY embedding <=> :query_vec
+LIMIT 5;
+```
+
+`<=>` is PgVector’s distance operator. Smaller distance means a closer meaning. Say this at the end: the return value is a suggestion on the ticket. The function does not call the replay API.
+
 ## Blind check
 
 - [ ] Explain the 2 a.m. problem in plain words
 - [ ] Explain RAG as “search first, then write from those pages”
 - [ ] Say who is allowed to restart a job
+- [ ] Write `suggest`: embed, search, return “I do not know” when nothing matches
 
 Next: [Samsung and open source](#/11-samsung-oss-project)

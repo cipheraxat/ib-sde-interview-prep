@@ -123,10 +123,40 @@ The scrambled value would still live at the vendor. A token lets the vendor work
 For “does the vendor have it?”, trust the vendor snapshot. Do not force your row to SUCCESS. Put unclear accounts in a manual queue.
 </details>
 
+## If they ask for code
+
+The proof join is already in the story above. Write that query if they ask “how did you know it worked?” These two are the other coding questions: how a row moves, and how a dead job resumes.
+
+Claim the row before you send it. The `WHERE` means two workers cannot both take the same account, and a confirmed account is left alone.
+
+```java
+int claimed = jdbc.update("""
+    UPDATE integration_account_status
+    SET tokenization_status = 'IN_TRANSIT', wave_id = ?
+    WHERE account_id = ?
+      AND business_date = ?
+      AND tokenization_status IN ('PENDING', 'FAILED')
+    """, waveId, accountId, runDate);
+// claimed == 0 → already in flight or already CONFIRMED
+```
+
+Resume is a select, not “start 100,000 accounts again”:
+
+```sql
+SELECT account_id
+FROM integration_account_status
+WHERE business_date = :runDate
+  AND expected_token = TRUE
+  AND tokenization_status IN ('PENDING', 'FAILED');
+```
+
+Say this: the next run reads that list. Accounts already `CONFIRMED` are not in it.
+
 ## Blind check
 
 - [ ] Explain the problem in plain words (vendor must not see raw PII)
 - [ ] Explain proof in one sentence (join, active token, not a green job)
 - [ ] Walk the switch: parallel, then small flip, then the rest, with a way back
+- [ ] Write the claim `UPDATE` and the resume `SELECT`
 
 Next: [Async and throughput](#/05-async-throughput)

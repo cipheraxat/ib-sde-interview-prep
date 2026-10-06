@@ -100,6 +100,37 @@ A failed file can be retried without a DBA. The whole night job is not run again
 | What do you store? | Step id, requester, time, reason, attempt count, and the new status. |
 | Who can call it? | Internal network only, bank login, a role such as `OPS_REPLAY`. It is not a public URL. |
 
+## If they ask for code
+
+The SQL in the story is the one to write. This is the method around it. The path is `POST /api/v1/replay/{executionId}`. The update sets `REPLAYING` only while the row is still `FAILED` at the version the caller read. Two clicks cannot both get `claimed == 1`.
+
+```java
+@PostMapping("/api/v1/replay/{executionId}")
+public ResponseEntity<Void> replay(
+        @PathVariable String executionId,
+        @RequestBody ReplayRequest request) {
+
+    int claimed = jdbc.update("""
+        UPDATE step
+        SET status = 'REPLAYING',
+            version = version + 1,
+            retry_count = retry_count + 1
+        WHERE id = ?
+          AND status = 'FAILED'
+          AND version = ?
+        """, executionId, request.version());
+
+    if (claimed == 0) {
+        return ResponseEntity.status(409).build(); // not FAILED, or the other click won
+    }
+    audit.record(request.requester(), executionId, request.reason());
+    worker.process(executionId, request.businessKey()); // same worker, same payment key
+    return ResponseEntity.accepted().build();
+}
+```
+
+Say this: there is no second code path for operations. Replay calls the same worker. If that call times out, the worker saves FAILED again. It does not force SUCCESS.
+
 ## Blind check
 
 - [ ] Say what a batch step is, in one sentence
@@ -107,5 +138,6 @@ A failed file can be retried without a DBA. The whole night job is not run again
 - [ ] Say the API accepts only FAILED
 - [ ] Say the `WHERE status = 'FAILED'` update, and why the second click loses
 - [ ] Say replay uses the same worker code and the same payment key
+- [ ] Write the method: the `UPDATE` claims `REPLAYING`, and `claimed == 0` returns 409
 
 Next: [Jenkins and releases](#/09-cicd-jenkins)

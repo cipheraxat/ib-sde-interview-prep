@@ -60,10 +60,45 @@ Audit and reporting can follow payment and account changes without your batch wa
 | What is in the message? | Event id, payment or account id, status, business date, time. Not raw personal data. |
 | Only if they ask: producer fails after the database commit? | The MySQL row already says what happened. You can publish the event again from that row. The consumer still ignores a duplicate event id. Some teams keep a separate outbox table for “not yet published”: one row per event, a published flag, and a job that sends rows still marked unpublished. Draw that table before you say the word outbox. |
 
+## If they ask for code
+
+The key is the payment id, so one payment’s events stay in order. The consumer’s safety is a unique `event_id`. A second delivery hits that key and changes nothing.
+
+```java
+kafkaTemplate.send("payment-events", paymentId, event); // key, then value
+```
+
+```java
+@KafkaListener(topics = "payment-events")
+public void onEvent(PaymentEvent event) {
+    int inserted = jdbc.update("""
+        INSERT INTO audit_event (event_id, payment_id, status)
+        VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE event_id = event_id
+        """, event.eventId(), event.paymentId(), event.status());
+    // inserted == 0 → this event id was already applied
+}
+```
+
+IB also uses Oracle. The same idea is `MERGE`, matched on `event_id`, insert only when not matched.
+
+A bad message does not retry forever:
+
+```java
+try {
+    apply(event);
+} catch (BadMessageException bad) {
+    kafkaTemplate.send("payment-events.dlt", event); // dead-letter: a person looks at it
+}
+```
+
+A database blip is different. Let that exception escape so the listener can retry. The unique `event_id` still protects you if the first attempt actually saved.
+
 ## Blind check
 
 - [ ] Explain why you did not call audit directly from the night job
 - [ ] Say “at least once” and what the consumer does on a duplicate
 - [ ] Say what you do with a message that will never succeed
+- [ ] Write the send with a key, and the insert that ignores a duplicate `event_id`
 
 Next: [Replay API](#/08-replay-api)

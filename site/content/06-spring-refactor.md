@@ -62,10 +62,47 @@ The spoken story is the timeout test with a fake vendor client. Answer the rows 
 | What is a transaction trap? | If you open a database transaction and then wait 10 seconds on HTTP, you occupy a connection the whole time. Save, call, then save the result. |
 | Only if they ask: what is N+1? | You load 100 parent rows, then the code quietly runs one extra query per row. Fix it by loading the related data in one query. This was not the story of the refactor. |
 
+## If they ask for code
+
+This is the test you write first. A fake vendor throws a timeout. The assertion is that the status is FAILED, and SUCCESS was never saved.
+
+```java
+@Test
+void timeoutIsFailed() {
+    VendorClient vendor = mock(VendorClient.class);
+    StepRepository steps = mock(StepRepository.class);
+    when(vendor.sync(any())).thenThrow(new ResourceAccessException("read timed out"));
+
+    PaymentService service = new PaymentService(vendor, steps);
+    service.sync("step-1");
+
+    verify(steps).mark("step-1", Status.FAILED);
+    verify(steps, never()).mark(any(), eq(Status.SUCCESS));
+}
+```
+
+The service takes its collaborators in the constructor. The test passes the fakes in. Spring does the same wiring in production.
+
+```java
+@Service
+public class PaymentService {
+    private final VendorClient vendor;
+    private final StepRepository steps;
+
+    public PaymentService(VendorClient vendor, StepRepository steps) {
+        this.vendor = vendor;
+        this.steps = steps;
+    }
+}
+```
+
+Say this if they ask about transactions: `@Transactional` stays on the save methods. It does not wrap `vendor.sync`, because that call can take seconds.
+
 ## Blind check
 
 - [ ] Explain why the old code was risky, not just “it was legacy”
 - [ ] Name the three layers and what each one refuses to do
 - [ ] Describe the timeout test in one sentence
+- [ ] Write that test: fake client throws, verify FAILED, verify SUCCESS never happens
 
 Next: [Kafka events](#/07-kafka)

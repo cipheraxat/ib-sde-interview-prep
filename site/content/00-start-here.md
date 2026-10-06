@@ -63,6 +63,7 @@ Every Barclays deep dive uses the same order. Read top to bottom. Stop when the 
 | STAR | Plain-English story: what the bank looked like, what your job was, what you changed, and the result |
 | 60-second STAR | Speak that story in one pass |
 | If they go deeper | Diagrams, SQL, failure tables |
+| If they ask for code | A short whiteboard sketch on that same page |
 | Blind check | Pass this before Mark done |
 
 Read the Situation first. It is written so you can picture the problem before the technical detail.

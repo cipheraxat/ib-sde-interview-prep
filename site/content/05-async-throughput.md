@@ -71,10 +71,39 @@ Write your real before-and-after numbers in [Personal facts](#/02a-personal-fact
 | Why not just start more scheduler jobs? | The scheduler can start jobs, but it does not know your rule “timeout means failed,” and it does not share one vendor speed limit cleanly. The application does. |
 | What is stored? | File or step id, status, how many attempts, the error text, the vendor reference, the business date. |
 
+## If they ask for code
+
+The pool size is a number you chose. Eight is an example, not a resume figure. One file is one task. The database row is saved before the call and again after it. The vendor call sits between those two saves, so a database connection is not held for the whole wait.
+
+```java
+ExecutorService pool = Executors.newFixedThreadPool(8);
+
+List<Future<?>> futures = new ArrayList<>();
+for (Path file : files) {
+    futures.add(pool.submit(() -> processOneFile(file)));
+}
+for (Future<?> future : futures) {
+    future.get(); // the night job ends only after every file has a status
+}
+
+void processOneFile(Path file) {
+    stepRepo.mark(file, Status.IN_PROGRESS); // short transaction, then it commits
+    try {
+        vendorClient.post(file);             // connect timeout and read timeout on this client
+        stepRepo.mark(file, Status.SUCCESS);
+    } catch (ResourceAccessException | VendorNon2xx e) {
+        stepRepo.mark(file, Status.FAILED);  // timeout and non-2xx are both FAILED
+    }
+}
+```
+
+If they ask “why not `newCachedThreadPool`?”: that pool grows without a cap and can overwhelm the vendor. `newFixedThreadPool` keeps the cap.
+
 ## Blind check
 
 - [ ] Explain the problem as both “too slow” and “false success”
 - [ ] Explain one file per worker and why the pool is limited
 - [ ] Say the 60% line with “same volume”
+- [ ] Write the fixed pool and `processOneFile`, including where the status is saved
 
 Next: [Spring Boot refactor](#/06-spring-refactor)
